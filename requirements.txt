@@ -1,0 +1,6 @@
+flask
+pandas
+openpyxl
+python-pptx
+matplotlib
+pywebview

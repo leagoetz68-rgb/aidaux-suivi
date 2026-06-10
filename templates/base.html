@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Aid'aux suivi{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/logo.svg" />
+  <link rel="stylesheet" href="/static/style.css?v=16" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div id="loading-overlay">Chargement…</div>
+
+<div class="app-layout">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <img src="/static/logo.svg" alt="Aid'aux" />
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/"              class="nav-item {{ 'active' if page=='accueil' }}">
+        <span class="nav-ico">🏠</span> Accueil
+      </a>
+      <a href="/import"        class="nav-item {{ 'active' if page=='import' }}">
+        <span class="nav-ico">📥</span> Importer des données
+      </a>
+      <a href="/interventions" class="nav-item {{ 'active' if page=='interventions' }}">
+        <span class="nav-ico">📋</span> Interventions
+      </a>
+      <a href="/intervenants"  class="nav-item {{ 'active' if page=='intervenants' }}">
+        <span class="nav-ico">👤</span> Par intervenant
+      </a>
+      <a href="/mensuel"       class="nav-item {{ 'active' if page=='mensuel' }}">
+        <span class="nav-ico">📅</span> Suivi mensuel
+      </a>
+      <a href="/rapports"      class="nav-item {{ 'active' if page=='rapports' }}">
+        <span class="nav-ico">📊</span> Rapports &amp; Export
+      </a>
+    </nav>
+    <div class="sidebar-footer">Aid'aux suivi · v2</div>
+  </aside>
+
+  <!-- ── CONTENU ── -->
+  <main class="content">
+    <header class="page-header">
+      <h1>{% block page_title %}{% endblock %}</h1>
+      <p class="page-subtitle">{% block page_subtitle %}{% endblock %}</p>
+    </header>
+    {% block content %}{% endblock %}
+  </main>
+
+</div>
+
+<script>
+function showLoading(on){ document.getElementById("loading-overlay").classList.toggle("active", on); }
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

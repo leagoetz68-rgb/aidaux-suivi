@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block page_title %}Rapports &amp; Export{% endblock %}
+{% block page_subtitle %}Générez un rapport PowerPoint professionnel, prêt à présenter.{% endblock %}
+
+{% block content %}
+
+<div class="card">
+  <h3>Contenu du rapport</h3>
+  <p style="color:var(--text-muted);margin-bottom:16px">Cochez les sections à inclure dans le PowerPoint.</p>
+
+  <div class="report-options">
+    <label class="report-opt">
+      <input type="checkbox" value="synthese" checked />
+      <div><strong>Synthèse globale</strong><span>Page de titre, KPIs, évolution mensuelle, répartition par type</span></div>
+    </label>
+    <label class="report-opt">
+      <input type="checkbox" value="classements" checked />
+      <div><strong>Classements & alertes</strong><span>Intervenants en difficulté, bénéficiaires les plus impactés</span></div>
+    </label>
+    <label class="report-opt">
+      <input type="checkbox" value="mensuel" checked />
+      <div><strong>Bilan mensuel</strong><span>Une slide par mois avec variation vs mois précédent</span></div>
+    </label>
+    <label class="report-opt">
+      <input type="checkbox" value="intervenants" id="opt-intervenants" />
+      <div><strong>Fiches par intervenant</strong><span>Une slide détaillée par intervenant. Tout le monde ou une sélection précise.</span></div>
+    </label>
+  </div>
+
+  <!-- Sélection des intervenants (visible si l'option est cochée) -->
+  <div id="interv-select" style="display:none; margin-top:16px; padding:16px; background:#F7F8FB; border-radius:10px;">
+    <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:12px;">
+      <label class="radio-line"><input type="radio" name="interv-mode" value="all" checked /> Tous les intervenants ayant des problèmes</label>
+      <label class="radio-line"><input type="radio" name="interv-mode" value="select" /> Une sélection précise</label>
+    </div>
+    <div id="interv-list-wrap" style="display:none;">
+      <input type="text" id="interv-search" placeholder="Rechercher un intervenant…" style="width:100%; margin-bottom:8px;" />
+      <div id="interv-checks" class="interv-checks"></div>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:6px;"><span id="interv-count">0</span> sélectionné(s)</p>
+    </div>
+  </div>
+
+  <div class="filter-group" style="margin-top:20px;max-width:260px">
+    <label>Limiter à un mois (optionnel)</label>
+    <select id="f-mois"><option value="">Toute la période</option></select>
+  </div>
+
+  <button class="btn-primary" id="btn-generate" style="margin-top:22px">
+    📊 Générer le PowerPoint
+  </button>
+  <p id="gen-status" style="margin-top:14px;color:var(--text-muted)"></p>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/rapports.js?v=16"></script>
+{% endblock %}

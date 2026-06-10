@@ -1,0 +1,106 @@
+═══════════════════════════════════════════════════════════════
+   AID'AUX SUIVI — INSTALLATION AU BUREAU (accès partagé)
+═══════════════════════════════════════════════════════════════
+
+PRINCIPE
+--------
+Un seul PC du bureau fait office de "serveur". Les collègues y accèdent
+depuis leur navigateur, sur le même réseau. Toutes les données sont
+communes (une seule base, sur le PC serveur).
+
+Conditions :
+  • Le PC serveur doit rester ALLUMÉ pendant que les collègues l'utilisent.
+  • Tous les ordinateurs doivent être sur le MÊME réseau (Wi-Fi/réseau du bureau).
+
+
+─────────────────────────────────────────────────────────────
+ÉTAPE 1 — Préparer le PC serveur (à faire UNE fois)
+─────────────────────────────────────────────────────────────
+
+1. Copier le dossier "ximi-analyzer" sur le PC serveur.
+   ⚠ IMPORTANT : le mettre dans un dossier LOCAL simple, par exemple
+   C:\AidauxSuivi  — PAS dans OneDrive (évite les conflits de la base).
+
+2. Installer Python depuis https://www.python.org/downloads/
+   → COCHER "Add Python to PATH" pendant l'installation.
+
+3. Ouvrir le dossier, double-cliquer sur "installer.bat"
+   (installe les librairies nécessaires). À faire une seule fois.
+
+4. Ouvrir le pare-feu pour le port 5000 :
+   - Clic droit sur le menu Démarrer → "Terminal (administrateur)"
+   - Copier-coller cette ligne puis Entrée :
+
+     netsh advfirewall firewall add rule name="Aidaux 5000" dir=in action=allow protocol=TCP localport=5000
+
+   (À faire une seule fois.)
+
+
+─────────────────────────────────────────────────────────────
+ÉTAPE 2 — Démarrage automatique (RECOMMANDÉ, à faire une fois)
+─────────────────────────────────────────────────────────────
+
+Double-cliquer sur "Activer demarrage automatique.bat"
+
+→ Désormais le serveur se lance TOUT SEUL à chaque démarrage du PC,
+  en arrière-plan (aucune fenêtre). Personne n'a à y penser.
+
+Pour le lancer tout de suite (sans redémarrer) : double-cliquer sur
+"Demarrer le serveur (bureau).bat" (voir ci-dessous).
+
+Pour CONNAÎTRE l'adresse à donner aux collègues quand le serveur
+tourne en silence : double-cliquer sur "Voir l'adresse du serveur.bat".
+
+Pour annuler : "Desactiver demarrage automatique.bat".
+
+
+─────────────────────────────────────────────────────────────
+ÉTAPE 2 bis — Démarrer manuellement (alternative)
+─────────────────────────────────────────────────────────────
+
+Si vous préférez le démarrage manuel, double-cliquer sur :
+   "Demarrer le serveur (bureau).bat"
+
+Une fenêtre s'ouvre et affiche 2 adresses, par exemple :
+   Pour les COLLÈGUES :  http://192.168.1.19:5000
+
+→ Laisser cette fenêtre OUVERTE.
+→ La fermer = arrêter le serveur.
+
+
+─────────────────────────────────────────────────────────────
+ÉTAPE 3 — Accès par les collègues
+─────────────────────────────────────────────────────────────
+
+Sur leur ordinateur, ouvrir le navigateur et taper l'adresse affichée
+(ex. http://192.168.1.19:5000). Rien à installer chez eux.
+
+RACCOURCI PRÊT À L'EMPLOI POUR LES COLLÈGUES (plus simple) :
+  - Sur le PC serveur, double-cliquer sur "Creer raccourci collegues.bat".
+  - Cela crée un dossier "Raccourci a distribuer aux collegues" contenant
+    un fichier "Aid'aux suivi.url".
+  - Envoyer ce fichier aux collègues (e-mail, clé USB, dossier partagé).
+  - Ils le déposent sur leur Bureau et double-cliquent : l'app s'ouvre
+    directement dans leur navigateur. Aucune adresse à taper.
+  (À refaire si l'adresse IP du serveur change.)
+
+
+─────────────────────────────────────────────────────────────
+NOTES
+─────────────────────────────────────────────────────────────
+
+• Données : si vous voulez démarrer avec une base VIDE sur le serveur,
+  supprimer le fichier "aidaux.db" avant le premier démarrage.
+  Sinon, les données actuelles (déjà importées) seront conservées.
+
+• Adresse IP qui change : si l'adresse du PC serveur change parfois,
+  demander à votre informaticien de lui fixer une "IP fixe", ou relancer
+  le .bat qui réaffiche l'adresse à jour.
+
+• Sécurité : l'app n'a pas de mot de passe (usage interne au réseau).
+  Pour un accès depuis l'extérieur / Internet, il faudra ajouter une
+  page de connexion — voir avec le développeur.
+
+• Sur le PC serveur lui-même, vous pouvez aussi utiliser l'app en
+  fenêtre dédiée via le raccourci "Aid'aux suivi" (mode local).
+═══════════════════════════════════════════════════════════════

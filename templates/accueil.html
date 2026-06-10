@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block page_title %}Tableau de bord{% endblock %}
+{% block page_subtitle %}Vue d'ensemble du suivi des interventions{% endblock %}
+
+{% block content %}
+<div id="empty-db" class="empty-card" style="display:none">
+  <p>Aucune donnée pour l'instant.</p>
+  <a href="/import" class="btn-primary">Importer un premier fichier CSV</a>
+</div>
+
+<div id="dashboard-content" style="display:none">
+
+  <!-- Cartes d'info générale -->
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="label">Interventions totales</div><div class="value" id="i-total">—</div></div>
+    <div class="kpi-card"><div class="label">Intervenants</div><div class="value" id="i-interv">—</div></div>
+    <div class="kpi-card"><div class="label">Bénéficiaires</div><div class="value" id="i-clients">—</div></div>
+    <div class="kpi-card"><div class="label">Mois couverts</div><div class="value" id="i-mois">—</div></div>
+  </div>
+
+  <!-- KPIs problèmes -->
+  <h2 class="section-title">Interventions à problèmes</h2>
+  <div class="kpi-grid">
+    <div class="kpi-card red"><div class="label">Manquées</div><div class="value" id="k-manq">—</div><div class="pct" id="k-manq-pct"></div></div>
+    <div class="kpi-card orange"><div class="label">Badgeages partiels</div><div class="value" id="k-part">—</div><div class="pct" id="k-part-pct"></div></div>
+    <div class="kpi-card yellow"><div class="label">Trop courtes</div><div class="value" id="k-court">—</div></div>
+    <div class="kpi-card blue"><div class="label">Trop longues</div><div class="value" id="k-long">—</div></div>
+  </div>
+
+  <!-- Graphiques -->
+  <div class="chart-row">
+    <div class="card chart-card">
+      <h3>Évolution mensuelle des interventions</h3>
+      <canvas id="chart-evolution"></canvas>
+    </div>
+    <div class="card chart-card">
+      <h3>Répartition par type</h3>
+      <canvas id="chart-repartition"></canvas>
+    </div>
+  </div>
+
+  <!-- Derniers imports -->
+  <div class="card">
+    <h3>Derniers fichiers importés</h3>
+    <table class="mini-table">
+      <thead><tr><th>Fichier</th><th>Importé le</th><th>Ajoutées</th><th>Doublons ignorés</th><th>Période</th></tr></thead>
+      <tbody id="imports-body"></tbody>
+    </table>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/accueil.js?v=16"></script>
+{% endblock %}

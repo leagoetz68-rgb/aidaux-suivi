@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block page_title %}Suivi par intervenant{% endblock %}
+{% block page_subtitle %}Comparaison des intervenants et fiche détaillée individuelle.{% endblock %}
+
+{% block content %}
+
+<div class="card filters">
+  <div class="filter-group">
+    <label>Mois</label>
+    <select id="f-mois"><option value="">Tous les mois</option></select>
+  </div>
+  <div class="filter-group" style="flex:1">
+    <label>Rechercher un intervenant</label>
+    <input type="text" id="f-search" placeholder="Nom…" style="width:100%" />
+  </div>
+</div>
+
+<div class="card table-section">
+  <div class="table-header">
+    <h3>Classement par taux de problèmes</h3>
+    <span class="table-count" id="count"></span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Intervenant</th><th>Interventions</th><th>À problèmes</th><th>Taux</th>
+        <th>Manquées</th><th>Partiels</th><th>Trop courtes</th><th>Trop longues</th><th></th>
+      </tr></thead>
+      <tbody id="table-body"><tr><td colspan="9" class="empty-state">Chargement…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Fiche détaillée (modale) -->
+<div id="modal" class="modal-overlay" style="display:none">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="m-nom"></h2>
+      <button class="modal-close" id="m-close">✕</button>
+    </div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="kpi-card"><div class="label">Interventions</div><div class="value" id="m-total">—</div></div>
+      <div class="kpi-card red"><div class="label">À problèmes</div><div class="value" id="m-probs">—</div><div class="pct" id="m-taux"></div></div>
+      <div class="kpi-card orange"><div class="label">Manquées</div><div class="value" id="m-manq">—</div></div>
+      <div class="kpi-card"><div class="label">Bénéficiaires</div><div class="value" id="m-clients">—</div></div>
+    </div>
+    <p id="m-compare" class="compare-line"></p>
+    <div class="chart-card" style="margin-top:10px">
+      <canvas id="m-chart" height="120"></canvas>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/intervenants.js?v=16"></script>
+{% endblock %}
