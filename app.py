@@ -29,7 +29,7 @@ def login():
     if request.method == "POST":
         if request.form["username"] == APP_USERNAME and request.form["password"] == APP_PASSWORD:
             session["logged_in"] = True
-            return redirect(url_for("index"))
+            return redirect(url_for("page_accueil"))
         error = "Identifiants incorrects"
     return render_template("login.html", error=error)
 
