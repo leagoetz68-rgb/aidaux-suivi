@@ -4,15 +4,39 @@ import io
 import os
 import tempfile
 
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, jsonify, render_template, request, send_file, session, redirect, url_for
 
 import database as db
 from parser import parse_csv_to_rows
 
 app = Flask(__name__)
-app.secret_key = "aidaux-suivi-local"
-
+app.secret_key = "aidaux-suivi-secret-2026"
 db.init_db()
+# Identifiants de connexion
+APP_USERNAME = "aidaux"
+APP_PASSWORD = "AidAux2931&&"
+
+@app.before_request
+def check_login():
+    if request.endpoint in ("login", "static"):
+        return
+    if not session.get("logged_in"):
+        return redirect(url_for("login"))
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = None
+    if request.method == "POST":
+        if request.form["username"] == APP_USERNAME and request.form["password"] == APP_PASSWORD:
+            session["logged_in"] = True
+            return redirect(url_for("index"))
+        error = "Identifiants incorrects"
+    return render_template("login.html", error=error)
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 # Libellés et couleurs des types de problèmes (partagés)
 PROBLEM_TYPES = ["Manquée", "Badgeage partiel", "Trop courte", "Trop longue"]
