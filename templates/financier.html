@@ -136,7 +136,7 @@ async function chargerMois() {
 }
 
 async function charger() {
-  const mois = document.getElementById('filtre-mois').value;
+  let mois = document.getElementById('filtre-mois').value;
   const params = mois ? `?mois=${mois}` : '';
 
   // Impact financier
@@ -166,7 +166,7 @@ async function charger() {
   // Accordéon par intervenant
   const container = document.getElementById('accordeon-intervenants');
   container.innerHTML = '';
-  const mois = document.getElementById('filtre-mois').value;
+  mois = document.getElementById('filtre-mois').value;
   d.par_intervenant.forEach(r => {
     const id = 'acc-' + r.intervenant.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
     container.innerHTML += `
