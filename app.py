@@ -371,6 +371,23 @@ def api_comparaison():
         return jsonify({"error": "Deux mois requis"}), 400
     return jsonify(db.comparaison_periodes(mois1, mois2))
 
+@app.route("/api/detail_financier_intervenant")
+def api_detail_financier_intervenant():
+    nom = request.args.get("intervenant")
+    mois = request.args.get("mois") or None
+    if not nom:
+        return jsonify({"error": "Intervenant manquant"}), 400
+    rows = db.query_interventions(intervenant=nom, mois=mois, problems_only=True)
+    out = []
+    for r in rows:
+        out.append({
+            "date_prevue": fmt_date_fr(r["date_prevue"]),
+            "client": r["client"],
+            "type_probleme": r["type_probleme"],
+            "diff_minutes": fmt_diff(r["diff_minutes"]),
+            "duree": r["duree"],
+        })
+    return jsonify(out)
 
 @app.route("/financier")
 def page_financier():
