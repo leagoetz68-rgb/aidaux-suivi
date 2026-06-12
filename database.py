@@ -439,3 +439,147 @@ def stats_mensuelles_detaillees():
         out.append({**e, "problemes": probs, "taux": taux, "variation": variation})
         prev_taux = taux
     return out
+# ─────────────────────────────────────────────────────────
+# Analyses financières et alertes
+# ─────────────────────────────────────────────────────────
+
+def impact_financier(mois=None, date_debut=None, date_fin=None):
+    """
+    Calcule l'impact financier estimé des anomalies.
+    - Manquées : durée prévue entière
+    - Trop courtes : diff_minutes manquantes
+    - Badgeage partiel : 30 min par défaut
+    Taux : aide ménagère 12.02€ (<01/06/2026), 12.31€ (≥01/06/2026) / auxiliaire 13€
+    """
+    from datetime import datetime as dt
+    conn = get_conn()
+    where = "WHERE type_probleme IS NOT NULL"
+    params = []
+    if mois:
+        where += " AND mois = ?"; params.append(mois)
+    if date_debut:
+        where += " AND date_prevue >= ?"; params.append(date_debut + " 00:00")
+    if date_fin:
+        where += " AND date_prevue <= ?"; params.append(date_fin + " 23:59")
+
+    rows = conn.execute(f"""
+        SELECT type_probleme, diff_minutes, duree, date_prevue
+        FROM interventions {where}
+    """, params).fetchall()
+    conn.close()
+
+    total_minutes = 0
+    detail = {"Manquée": 0, "Trop courte": 0, "Badgeage partiel": 0, "Trop longue": 0}
+    cout_detail = {"Manquée": 0.0, "Trop courte": 0.0, "Badgeage partiel": 0.0, "Trop longue": 0.0}
+
+    for r in rows:
+        tp, diff, duree, date_str = r[0], r[1], r[2], r[3]
+        # Taux horaire selon date
+        taux = 12.02
+        if date_str:
+            try:
+                if dt.strptime(date_str[:10], "%Y-%m-%d") >= dt(2026, 6, 1):
+                    taux = 12.31
+            except Exception:
+                pass
+
+        minutes = 0
+        if tp == "Manquée":
+            try:
+                parts = duree.split(":")
+                minutes = int(parts[0]) * 60 + int(parts[1])
+            except Exception:
+                minutes = 60
+        elif tp == "Trop courte":
+            minutes = abs(diff) if diff else 0
+        elif tp == "Badgeage partiel":
+            minutes = 30
+
+        detail[tp] = detail.get(tp, 0) + minutes
+        cout_detail[tp] = cout_detail.get(tp, 0.0) + round(minutes / 60 * taux, 2)
+        total_minutes += minutes
+
+    taux_ref = 12.31
+    return {
+        "total_minutes": round(total_minutes),
+        "total_heures": round(total_minutes / 60, 1),
+        "cout_estime": round(sum(cout_detail.values()), 2),
+        "taux_horaire": taux_ref,
+        "detail_minutes": detail,
+        "detail_cout": cout_detail,
+    }
+
+
+def risque_facturation(mois=None):
+    """Interventions à risque de facturation incorrecte (Manquées + Badgeage partiel)."""
+    conn = get_conn()
+    where = "WHERE type_probleme IN ('Manquée', 'Badgeage partiel')"
+    params = []
+    if mois:
+        where += " AND mois = ?"; params.append(mois)
+    rows = conn.execute(f"""
+        SELECT intervenant, client, date_prevue, type_probleme, duree
+        FROM interventions {where}
+        ORDER BY type_probleme, date_prevue DESC
+    """, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def alertes_cloture(mois=None):
+    """Interventions prioritaires à vérifier avant clôture de paie."""
+    conn = get_conn()
+    where = "WHERE type_probleme IN ('Manquée', 'Badgeage partiel', 'Trop courte')"
+    params = []
+    if mois:
+        where += " AND mois = ?"; params.append(mois)
+    rows = conn.execute(f"""
+        SELECT intervenant, client, date_prevue, type_probleme, duree, diff_minutes
+        FROM interventions {where}
+        ORDER BY
+            CASE type_probleme
+                WHEN 'Manquée' THEN 1
+                WHEN 'Badgeage partiel' THEN 2
+                WHEN 'Trop courte' THEN 3
+            END,
+            date_prevue DESC
+    """, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def comparaison_periodes(mois1, mois2):
+    """Compare deux mois : anomalies, taux, impact financier."""
+    def stats_mois(mois):
+        conn = get_conn()
+        row = conn.execute("""
+            SELECT COUNT(*) as total,
+                   SUM(CASE WHEN type_probleme='Manquée' THEN 1 ELSE 0 END) as manquees,
+                   SUM(CASE WHEN type_probleme='Badgeage partiel' THEN 1 ELSE 0 END) as partiels,
+                   SUM(CASE WHEN type_probleme='Trop courte' THEN 1 ELSE 0 END) as courtes,
+                   SUM(CASE WHEN type_probleme='Trop longue' THEN 1 ELSE 0 END) as longues
+            FROM interventions WHERE mois = ?
+        """, (mois,)).fetchone()
+        conn.close()
+        if not row or row[0] == 0:
+            return None
+        d = dict(row)
+        d["problemes"] = d["manquees"] + d["partiels"] + d["courtes"] + d["longues"]
+        d["taux"] = round(d["problemes"] / d["total"] * 100, 1) if d["total"] else 0
+        d["mois"] = mois
+        impact = impact_financier(mois=mois)
+        d["cout_estime"] = impact["cout_estime"]
+        d["total_heures"] = impact["total_heures"]
+        return d
+
+    s1 = stats_mois(mois1)
+    s2 = stats_mois(mois2)
+    if not s1 or not s2:
+        return {"error": "Données manquantes pour l'un des mois"}
+    return {
+        "mois1": s1,
+        "mois2": s2,
+        "variation_taux": round(s2["taux"] - s1["taux"], 1),
+        "variation_cout": round(s2["cout_estime"] - s1["cout_estime"], 2),
+        "variation_problemes": s2["problemes"] - s1["problemes"],
+    }
