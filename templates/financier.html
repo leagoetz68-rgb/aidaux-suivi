@@ -1,4 +1,4 @@
-Tu es déjà dans le dossier templates. Clique sur "Add file" → "Create new file", nomme-le financier.html et colle ce code :
+
 html{% extends "base.html" %}
 {% block title %}Analyses financières{% endblock %}
 {% block content %}
@@ -55,7 +55,23 @@ html{% extends "base.html" %}
     <tbody></tbody>
   </table>
 </div>
-
+<!-- Impact par intervenant -->
+<div class="card" style="margin-bottom:1.5rem">
+  <h2>👤 Impact financier par intervenant</h2>
+  <table class="table" id="table-intervenants">
+    <thead>
+      <tr>
+        <th>Intervenant</th>
+        <th>Manquées</th>
+        <th>Badgeage partiel</th>
+        <th>Trop courtes</th>
+        <th>Heures perdues</th>
+        <th>Coût estimé</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
 <!-- Risque facturation -->
 <div class="card" style="margin-bottom:1.5rem">
   <h2>⚠️ Interventions à risque de facturation incorrecte</h2>
@@ -142,6 +158,23 @@ async function charger() {
     </tr>`;
   });
 
+   // Tableau par intervenant
+  const tbody3 = document.querySelector('#table-intervenants tbody');
+  tbody3.innerHTML = '';
+  if (d.par_intervenant.length === 0) {
+    tbody3.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888">Aucune donnée</td></tr>';
+  } else {
+    d.par_intervenant.forEach(r => {
+      tbody3.innerHTML += `<tr>
+        <td><strong>${r.intervenant}</strong></td>
+        <td>${r.manquees}</td>
+        <td>${r.partiels}</td>
+        <td>${r.courtes}</td>
+        <td>${r.total_heures} h</td>
+        <td style="font-weight:600;color:#c0392b">${r.cout_estime.toFixed(2)} €</td>
+      </tr>`;
+    });
+  }
   // Risque facturation
   const tbody2 = document.querySelector('#table-risque tbody');
   tbody2.innerHTML = '';
