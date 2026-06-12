@@ -163,23 +163,28 @@ async function charger() {
     </tr>`;
   });
 
-   // Tableau par intervenant
-  const tbody3 = document.querySelector('#table-intervenants tbody');
-  tbody3.innerHTML = '';
-  if (d.par_intervenant.length === 0) {
-    tbody3.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888">Aucune donnée</td></tr>';
-  } else {
-    d.par_intervenant.forEach(r => {
-      tbody3.innerHTML += `<tr>
-        <td><strong>${r.intervenant}</strong></td>
-        <td>${r.manquees}</td>
-        <td>${r.partiels}</td>
-        <td>${r.courtes}</td>
-        <td>${r.total_heures} h</td>
-        <td style="font-weight:600;color:#c0392b">${r.cout_estime.toFixed(2)} €</td>
-      </tr>`;
-    });
-  }
+  // Accordéon par intervenant
+  const container = document.getElementById('accordeon-intervenants');
+  container.innerHTML = '';
+  const mois = document.getElementById('filtre-mois').value;
+  d.par_intervenant.forEach(r => {
+    const id = 'acc-' + r.intervenant.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
+    container.innerHTML += `
+      <div style="border-bottom:1px solid #eee">
+        <div onclick="toggleDetail('${id}', '${r.intervenant}', '${mois}')"
+             style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;cursor:pointer;background:#f9f9f9;hover:background:#f0f0f0">
+          <div>
+            <strong>${r.intervenant}</strong>
+            <span style="margin-left:1rem;font-size:0.85rem;color:#666">${r.manquees} manquées · ${r.partiels} partiels · ${r.courtes} courtes</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem">
+            <span style="font-weight:600;color:#c0392b">${r.cout_estime.toFixed(2)} €</span>
+            <span id="arrow-${id}">▶</span>
+          </div>
+        </div>
+        <div id="${id}" style="display:none;padding:0.5rem 1rem 1rem"></div>
+      </div>`;
+  });
   // Risque facturation
   const tbody2 = document.querySelector('#table-risque tbody');
   tbody2.innerHTML = '';
@@ -266,7 +271,37 @@ async function comparer() {
       </div>
     </div>`;
 }
-
+async function toggleDetail(id, intervenant, mois) {
+  const div = document.getElementById(id);
+  const arrow = document.getElementById('arrow-' + id);
+  if (div.style.display !== 'none') {
+    div.style.display = 'none';
+    arrow.textContent = '▶';
+    return;
+  }
+  arrow.textContent = '▼';
+  div.innerHTML = '<p style="color:#888;padding:0.5rem">Chargement...</p>';
+  div.style.display = 'block';
+  const params = mois ? `?intervenant=${encodeURIComponent(intervenant)}&mois=${mois}` : `?intervenant=${encodeURIComponent(intervenant)}`;
+  const res = await fetch(`/api/detail_financier_intervenant${params}`);
+  const rows = await res.json();
+  if (rows.length === 0) {
+    div.innerHTML = '<p style="color:#888;padding:0.5rem">Aucune anomalie</p>';
+    return;
+  }
+  let html = '<table class="table" style="margin:0"><thead><tr><th>Date</th><th>Client</th><th>Type</th><th>Écart</th><th>Durée</th></tr></thead><tbody>';
+  rows.forEach(r => {
+    html += `<tr>
+      <td>${r.date_prevue}</td>
+      <td>${r.client}</td>
+      <td><span class="badge badge-${getBadgeClass(r.type_probleme)}">${r.type_probleme}</span></td>
+      <td>${r.diff_minutes || '—'}</td>
+      <td>${r.duree || '—'}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  div.innerHTML = html;
+}
 function getBadgeClass(type) {
   if (type === 'Manquée') return 'danger';
   if (type === 'Badgeage partiel') return 'warning';
