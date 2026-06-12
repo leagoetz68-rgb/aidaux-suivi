@@ -64,18 +64,7 @@ html{% extends "base.html" %}
 <div class="card" style="margin-bottom:1.5rem">
   <h2>⚠️ Interventions à risque de facturation incorrecte</h2>
   <p style="color:#666;font-size:0.9rem">Interventions manquées ou badgeage partiel — à vérifier avant facturation client.</p>
-  <table class="table" id="table-risque">
-    <thead>
-      <tr>
-        <th>Date prévue</th>
-        <th>Intervenant</th>
-        <th>Client</th>
-        <th>Type</th>
-        <th>Durée prévue</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <div id="table-risque"></div>
 </div>
 
 <!-- Alertes clôture -->
@@ -185,22 +174,30 @@ async function charger() {
         <div id="${id}" style="display:none;padding:0.5rem 1rem 1rem"></div>
       </div>`;
   });
-  // Risque facturation
-  const tbody2 = document.querySelector('#table-risque tbody');
+ // Risque facturation par intervenant (accordéon)
+  const tbody2 = document.getElementById('table-risque');
   tbody2.innerHTML = '';
-  if (d.risque_facturation.length === 0) {
-    tbody2.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#888">Aucune intervention à risque</td></tr>';
-  } else {
-    d.risque_facturation.forEach(r => {
-      tbody2.innerHTML += `<tr>
-        <td>${r.date_prevue}</td>
-        <td>${r.intervenant}</td>
-        <td>${r.client}</td>
-        <td><span class="badge badge-${getBadgeClass(r.type_probleme)}">${r.type_probleme}</span></td>
-        <td>${r.duree || '—'}</td>
-      </tr>`;
-    });
-  }
+  const groupes = {};
+  d.risque_facturation.forEach(r => {
+    if (!groupes[r.intervenant]) groupes[r.intervenant] = [];
+    groupes[r.intervenant].push(r);
+  });
+  Object.entries(groupes).forEach(([nom, items]) => {
+    const id2 = 'risk-' + nom.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
+    tbody2.innerHTML += `
+      <div style="border-bottom:1px solid #eee">
+        <div onclick="document.getElementById('${id2}').style.display=document.getElementById('${id2}').style.display==='none'?'block':'none'"
+             style="display:flex;justify-content:space-between;padding:0.75rem 1rem;cursor:pointer;background:#fff8f0">
+          <strong>${nom}</strong>
+          <span style="color:#e67e22">${items.length} intervention(s)</span>
+        </div>
+        <div id="${id2}" style="display:none;padding:0.5rem 1rem">
+          <table class="table" style="margin:0"><thead><tr><th>Date</th><th>Client</th><th>Type</th><th>Durée</th></tr></thead><tbody>
+          ${items.map(r => `<tr><td>${r.date_prevue}</td><td>${r.client}</td><td>${r.type_probleme}</td><td>${r.duree||'—'}</td></tr>`).join('')}
+          </tbody></table>
+        </div>
+      </div>`;
+  });
 
   // Alertes
   const resA = await fetch(`/api/alertes${params}`);
