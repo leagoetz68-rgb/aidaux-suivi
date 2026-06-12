@@ -164,12 +164,12 @@ async function charger() {
   });
 
   // Accordéon par intervenant
-  const container = document.getElementById('accordeon-intervenants');
-  container.innerHTML = '';
+  const containerAcc = document.getElementById('accordeon-intervenants');
+  containerAcc.innerHTML = '';
   mois = document.getElementById('filtre-mois').value;
   d.par_intervenant.forEach(r => {
     const id = 'acc-' + r.intervenant.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
-    container.innerHTML += `
+   containerAcc.innerHTML += `
       <div style="border-bottom:1px solid #eee">
         <div onclick="toggleDetail('${id}', '${r.intervenant}', '${mois}')"
              style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;cursor:pointer;background:#f9f9f9;hover:background:#f0f0f0">
