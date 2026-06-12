@@ -583,3 +583,60 @@ def comparaison_periodes(mois1, mois2):
         "variation_cout": round(s2["cout_estime"] - s1["cout_estime"], 2),
         "variation_problemes": s2["problemes"] - s1["problemes"],
     }
+def impact_financier_par_intervenant(mois=None):
+    """Impact financier estimé des anomalies, groupé par intervenant."""
+    from datetime import datetime as dt
+    conn = get_conn()
+    where = "WHERE type_probleme IS NOT NULL"
+    params = []
+    if mois:
+        where += " AND mois = ?"; params.append(mois)
+
+    rows = conn.execute(f"""
+        SELECT intervenant, type_probleme, diff_minutes, duree, date_prevue
+        FROM interventions {where}
+        ORDER BY intervenant
+    """, params).fetchall()
+    conn.close()
+
+    intervenants = {}
+    for r in rows:
+        nom = r[0]
+        tp, diff, duree, date_str = r[1], r[2], r[3], r[4]
+
+        taux = 12.02
+        if date_str:
+            try:
+                if dt.strptime(date_str[:10], "%Y-%m-%d") >= dt(2026, 6, 1):
+                    taux = 12.31
+            except Exception:
+                pass
+
+        minutes = 0
+        if tp == "Manquée":
+            try:
+                parts = duree.split(":")
+                minutes = int(parts[0]) * 60 + int(parts[1])
+            except Exception:
+                minutes = 60
+        elif tp == "Trop courte":
+            minutes = abs(diff) if diff else 0
+        elif tp == "Badgeage partiel":
+            minutes = 30
+
+        if nom not in intervenants:
+            intervenants[nom] = {"intervenant": nom, "total_minutes": 0, "cout_estime": 0.0,
+                                  "manquees": 0, "partiels": 0, "courtes": 0, "longues": 0}
+        intervenants[nom]["total_minutes"] += minutes
+        intervenants[nom]["cout_estime"] += round(minutes / 60 * taux, 2)
+        if tp == "Manquée": intervenants[nom]["manquees"] += 1
+        elif tp == "Badgeage partiel": intervenants[nom]["partiels"] += 1
+        elif tp == "Trop courte": intervenants[nom]["courtes"] += 1
+        elif tp == "Trop longue": intervenants[nom]["longues"] += 1
+
+    result = list(intervenants.values())
+    for r in result:
+        r["cout_estime"] = round(r["cout_estime"], 2)
+        r["total_heures"] = round(r["total_minutes"] / 60, 1)
+    result.sort(key=lambda x: x["cout_estime"], reverse=True)
+    return result
