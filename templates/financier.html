@@ -286,7 +286,63 @@ function getBadgeClass(type) {
   if (type === 'Trop longue') return 'secondary';
   return 'default';
 }
+let chartCamembert, chartBarres, chartCourbe;
 
-chargerMois().then(() => charger());
+async function chargerGraphiques(params) {
+  // Données pour camembert et barres depuis impact_financier
+  const res = await fetch(`/api/impact_financier${params}`);
+  const d = await res.json();
+
+  // Camembert
+  const labelsCam = ['Manquée', 'Badgeage partiel', 'Trop courte'];
+  const dataCam = [
+    d.detail_cout['Manquée'] || 0,
+    d.detail_cout['Badgeage partiel'] || 0,
+    d.detail_cout['Trop courte'] || 0,
+  ];
+  if (chartCamembert) chartCamembert.destroy();
+  chartCamembert = new Chart(document.getElementById('chart-camembert'), {
+    type: 'doughnut',
+    data: {
+      labels: labelsCam,
+      datasets: [{ data: dataCam, backgroundColor: ['#e74c3c','#f39c12','#3498db'] }]
+    },
+    options: { plugins: { legend: { position: 'bottom' } } }
+  });
+
+  // Barres intervenants (top 10)
+  const top10 = d.par_intervenant.slice(0, 10);
+  if (chartBarres) chartBarres.destroy();
+  chartBarres = new Chart(document.getElementById('chart-barres'), {
+    type: 'bar',
+    data: {
+      labels: top10.map(r => r.intervenant.split(',')[0]),
+      datasets: [{ label: 'Coût estimé (€)', data: top10.map(r => r.cout_estime), backgroundColor: '#1c3885' }]
+    },
+    options: { indexAxis: 'y', plugins: { legend: { display: false } } }
+  });
+
+  // Courbe mensuelle
+  const resMois = await fetch('/api/mensuel');
+  const dm = await resMois.json();
+  const moisData = dm.mois || [];
+  if (chartCourbe) chartCourbe.destroy();
+  chartCourbe = new Chart(document.getElementById('chart-courbe'), {
+    type: 'line',
+    data: {
+      labels: moisData.map(m => m.mois),
+      datasets: [{
+        label: 'Anomalies / mois',
+        data: moisData.map(m => m.problemes),
+        borderColor: '#e74c3c',
+        backgroundColor: 'rgba(231,76,60,0.1)',
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: { plugins: { legend: { display: false } } }
+  });
+}
+chargerMois().then(() => { charger(); chargerGraphiques(''); });
 </script>
 {% endblock %}
