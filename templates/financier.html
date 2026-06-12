@@ -199,29 +199,38 @@ async function charger() {
       </div>`;
   });
 
-  // Alertes
+ // Alertes par intervenant (accordéon)
   const resA = await fetch(`/api/alertes${params}`);
   const da = await resA.json();
-  const container = document.getElementById('alertes-container');
+  const containerAlertes = document.getElementById('alertes-container');
   if (da.alertes.length === 0) {
-    container.innerHTML = '<p style="color:#27ae60">✅ Aucune alerte — paie prête à traiter</p>';
+    containerAlertes.innerHTML = '<p style="color:#27ae60">✅ Aucune alerte — paie prête à traiter</p>';
   } else {
-    let html = `<p style="color:#e74c3c;font-weight:600">${da.total} intervention(s) à vérifier</p>`;
-    html += '<table class="table"><thead><tr><th>Priorité</th><th>Intervenant</th><th>Client</th><th>Date</th><th>Type</th><th>Écart</th></tr></thead><tbody>';
-    da.alertes.forEach((a, i) => {
-      const prio = a.type_probleme === 'Manquée' ? '🔴 Haute' : a.type_probleme === 'Badgeage partiel' ? '🟠 Moyenne' : '🟡 Basse';
-      html += `<tr>
-        <td>${prio}</td>
-        <td>${a.intervenant}</td>
-        <td>${a.client}</td>
-        <td>${a.date_prevue}</td>
-        <td>${a.type_probleme}</td>
-        <td>${a.diff_minutes || '—'}</td>
-      </tr>`;
+    const groupesA = {};
+    da.alertes.forEach(a => {
+      if (!groupesA[a.intervenant]) groupesA[a.intervenant] = [];
+      groupesA[a.intervenant].push(a);
     });
-    html += '</tbody></table>';
-    container.innerHTML = html;
-  }
+    let html = `<p style="color:#e74c3c;font-weight:600">${da.total} intervention(s) à vérifier</p>`;
+    Object.entries(groupesA).forEach(([nom, items]) => {
+      const idA = 'alert-' + nom.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
+      const hasPrio = items.some(i => i.type_probleme === 'Manquée');
+      const color = hasPrio ? '#e74c3c' : '#f39c12';
+      html += `<div style="border-bottom:1px solid #eee">
+        <div onclick="document.getElementById('${idA}').style.display=document.getElementById('${idA}').style.display==='none'?'block':'none'"
+             style="display:flex;justify-content:space-between;padding:0.75rem 1rem;cursor:pointer;background:#fff">
+          <strong>${nom}</strong>
+          <span style="color:${color}">${items.length} alerte(s)</span>
+        </div>
+        <div id="${idA}" style="display:none;padding:0.5rem 1rem">
+          <table class="table" style="margin:0"><thead><tr><th>Priorité</th><th>Client</th><th>Date</th><th>Type</th><th>Écart</th></tr></thead><tbody>
+          ${items.map(a => `<tr><td>${a.type_probleme==='Manquée'?'🔴 Haute':a.type_probleme==='Badgeage partiel'?'🟠 Moyenne':'🟡 Basse'}</td><td>${a.client}</td><td>${a.date_prevue}</td><td>${a.type_probleme}</td><td>${a.diff_minutes||'—'}</td></tr>`).join('')}
+          </tbody></table>
+        </div>
+      </div>`;
+    });
+    containerAlertes.innerHTML = html;
+  } 
 }
 
 async function comparer() {
