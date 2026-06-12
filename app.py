@@ -348,7 +348,8 @@ def api_impact_financier():
     data["nb_risque_facturation"] = len(risque)
     data["risque_facturation"] = risque[:20]  # top 20
     for r in data["risque_facturation"]:
-        r["date_prevue"] = fmt_date_fr(r["date_prevue"])
+        r["date_prevue"] = fmt_date_fr(r["date_prevue"]) 
+        data["par_intervenant"] = db.impact_financier_par_intervenant(mois=mois)
     return jsonify(data)
 
 
