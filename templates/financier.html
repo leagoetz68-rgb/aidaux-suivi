@@ -96,7 +96,24 @@ html{% extends "base.html" %}
   <p style="color:#666;font-size:0.9rem">Interventions prioritaires à régulariser avant traitement de la paie.</p>
   <div id="alertes-container"></div>
 </div>
-
+<!-- Graphiques -->
+<div class="card" style="margin-bottom:1.5rem">
+  <h2>📈 Visualisations</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1rem">
+    <div>
+      <h3 style="font-size:1rem;margin-bottom:0.5rem">Répartition du coût par type</h3>
+      <canvas id="chart-camembert" height="250"></canvas>
+    </div>
+    <div>
+      <h3 style="font-size:1rem;margin-bottom:0.5rem">Top intervenants par coût estimé</h3>
+      <canvas id="chart-barres" height="250"></canvas>
+    </div>
+  </div>
+  <div style="margin-top:1.5rem">
+    <h3 style="font-size:1rem;margin-bottom:0.5rem">Évolution du coût mensuel</h3>
+    <canvas id="chart-courbe" height="100"></canvas>
+  </div>
+</div>
 <!-- Comparaison périodes -->
 <div class="card">
   <h2>📊 Comparaison de deux périodes</h2>
