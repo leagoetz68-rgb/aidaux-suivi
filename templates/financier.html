@@ -1,0 +1,242 @@
+Tu es déjà dans le dossier templates. Clique sur "Add file" → "Create new file", nomme-le financier.html et colle ce code :
+html{% extends "base.html" %}
+{% block title %}Analyses financières{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>💶 Analyses financières</h1>
+  <p class="subtitle">Impact financier estimé des anomalies de badgeage</p>
+</div>
+
+<!-- Filtres -->
+<div class="card" style="margin-bottom:1.5rem">
+  <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+    <div>
+      <label>Mois</label>
+      <select id="filtre-mois">
+        <option value="">Tous les mois</option>
+      </select>
+    </div>
+    <button class="btn-primary" onclick="charger()">Actualiser</button>
+  </div>
+</div>
+
+<!-- KPIs financiers -->
+<div class="kpi-grid" id="kpi-financier" style="margin-bottom:1.5rem">
+  <div class="kpi-card">
+    <div class="kpi-label">Heures perdues estimées</div>
+    <div class="kpi-value" id="kpi-heures">—</div>
+  </div>
+  <div class="kpi-card kpi-danger">
+    <div class="kpi-label">Coût estimé total</div>
+    <div class="kpi-value" id="kpi-cout">—</div>
+  </div>
+  <div class="kpi-card kpi-warning">
+    <div class="kpi-label">Risque facturation</div>
+    <div class="kpi-value" id="kpi-risque">—</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Taux horaire référence</div>
+    <div class="kpi-value" id="kpi-taux">—</div>
+  </div>
+</div>
+
+<!-- Détail par type -->
+<div class="card" style="margin-bottom:1.5rem">
+  <h2>Détail par type d'anomalie</h2>
+  <table class="table" id="table-detail">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Heures estimées</th>
+        <th>Coût estimé</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- Risque facturation -->
+<div class="card" style="margin-bottom:1.5rem">
+  <h2>⚠️ Interventions à risque de facturation incorrecte</h2>
+  <p style="color:#666;font-size:0.9rem">Interventions manquées ou badgeage partiel — à vérifier avant facturation client.</p>
+  <table class="table" id="table-risque">
+    <thead>
+      <tr>
+        <th>Date prévue</th>
+        <th>Intervenant</th>
+        <th>Client</th>
+        <th>Type</th>
+        <th>Durée prévue</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- Alertes clôture -->
+<div class="card" style="margin-bottom:1.5rem">
+  <h2>🔔 Alertes avant clôture de paie</h2>
+  <p style="color:#666;font-size:0.9rem">Interventions prioritaires à régulariser avant traitement de la paie.</p>
+  <div id="alertes-container"></div>
+</div>
+
+<!-- Comparaison périodes -->
+<div class="card">
+  <h2>📊 Comparaison de deux périodes</h2>
+  <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+    <div>
+      <label>Période 1</label>
+      <select id="comp-mois1"></select>
+    </div>
+    <div>
+      <label>Période 2</label>
+      <select id="comp-mois2"></select>
+    </div>
+    <button class="btn-primary" onclick="comparer()">Comparer</button>
+  </div>
+  <div id="comparaison-result"></div>
+</div>
+
+<script>
+async function chargerMois() {
+  const res = await fetch('/api/mois');
+  const mois = await res.json();
+  ['filtre-mois','comp-mois1','comp-mois2'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (id === 'filtre-mois') sel.innerHTML = '<option value="">Tous les mois</option>';
+    else sel.innerHTML = '';
+    mois.forEach(m => {
+      const [y, mo] = m.split('-');
+      const label = `${mo}/${y}`;
+      sel.innerHTML += `<option value="${m}">${label}</option>`;
+    });
+  });
+}
+
+async function charger() {
+  const mois = document.getElementById('filtre-mois').value;
+  const params = mois ? `?mois=${mois}` : '';
+
+  // Impact financier
+  const res = await fetch(`/api/impact_financier${params}`);
+  const d = await res.json();
+
+  document.getElementById('kpi-heures').textContent = d.total_heures + ' h';
+  document.getElementById('kpi-cout').textContent = d.cout_estime.toFixed(2) + ' €';
+  document.getElementById('kpi-risque').textContent = d.nb_risque_facturation + ' interventions';
+  document.getElementById('kpi-taux').textContent = d.taux_horaire.toFixed(2) + ' €/h';
+
+  // Détail par type
+  const types = ['Manquée','Badgeage partiel','Trop courte','Trop longue'];
+  const tbody = document.querySelector('#table-detail tbody');
+  tbody.innerHTML = '';
+  types.forEach(t => {
+    const min = d.detail_minutes[t] || 0;
+    const cout = d.detail_cout[t] || 0;
+    const h = (min / 60).toFixed(1);
+    tbody.innerHTML += `<tr>
+      <td><span class="badge badge-${getBadgeClass(t)}">${t}</span></td>
+      <td>${h} h (${min} min)</td>
+      <td>${cout.toFixed(2)} €</td>
+    </tr>`;
+  });
+
+  // Risque facturation
+  const tbody2 = document.querySelector('#table-risque tbody');
+  tbody2.innerHTML = '';
+  if (d.risque_facturation.length === 0) {
+    tbody2.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#888">Aucune intervention à risque</td></tr>';
+  } else {
+    d.risque_facturation.forEach(r => {
+      tbody2.innerHTML += `<tr>
+        <td>${r.date_prevue}</td>
+        <td>${r.intervenant}</td>
+        <td>${r.client}</td>
+        <td><span class="badge badge-${getBadgeClass(r.type_probleme)}">${r.type_probleme}</span></td>
+        <td>${r.duree || '—'}</td>
+      </tr>`;
+    });
+  }
+
+  // Alertes
+  const resA = await fetch(`/api/alertes${params}`);
+  const da = await resA.json();
+  const container = document.getElementById('alertes-container');
+  if (da.alertes.length === 0) {
+    container.innerHTML = '<p style="color:#27ae60">✅ Aucune alerte — paie prête à traiter</p>';
+  } else {
+    let html = `<p style="color:#e74c3c;font-weight:600">${da.total} intervention(s) à vérifier</p>`;
+    html += '<table class="table"><thead><tr><th>Priorité</th><th>Intervenant</th><th>Client</th><th>Date</th><th>Type</th><th>Écart</th></tr></thead><tbody>';
+    da.alertes.forEach((a, i) => {
+      const prio = a.type_probleme === 'Manquée' ? '🔴 Haute' : a.type_probleme === 'Badgeage partiel' ? '🟠 Moyenne' : '🟡 Basse';
+      html += `<tr>
+        <td>${prio}</td>
+        <td>${a.intervenant}</td>
+        <td>${a.client}</td>
+        <td>${a.date_prevue}</td>
+        <td>${a.type_probleme}</td>
+        <td>${a.diff_minutes || '—'}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  }
+}
+
+async function comparer() {
+  const mois1 = document.getElementById('comp-mois1').value;
+  const mois2 = document.getElementById('comp-mois2').value;
+  if (!mois1 || !mois2) return;
+  const res = await fetch(`/api/comparaison?mois1=${mois1}&mois2=${mois2}`);
+  const d = await res.json();
+  if (d.error) {
+    document.getElementById('comparaison-result').innerHTML = `<p style="color:red">${d.error}</p>`;
+    return;
+  }
+
+  const fmtMois = m => { const [y,mo] = m.split('-'); return `${mo}/${y}`; };
+  const varTaux = d.variation_taux;
+  const varCout = d.variation_cout;
+  const varProb = d.variation_problemes;
+  const couleurTaux = varTaux > 0 ? '#e74c3c' : '#27ae60';
+  const couleurCout = varCout > 0 ? '#e74c3c' : '#27ae60';
+
+  document.getElementById('comparaison-result').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-top:1rem">
+      <div class="kpi-card">
+        <div class="kpi-label">${fmtMois(d.mois1.mois)}</div>
+        <div style="font-size:0.9rem;margin-top:0.5rem">
+          <div>${d.mois1.total} interventions</div>
+          <div>${d.mois1.problemes} anomalies (${d.mois1.taux}%)</div>
+          <div style="font-weight:600">${d.mois1.cout_estime.toFixed(2)} € estimés</div>
+        </div>
+      </div>
+      <div class="kpi-card" style="text-align:center;display:flex;flex-direction:column;justify-content:center">
+        <div style="font-size:1.5rem">→</div>
+        <div style="color:${couleurTaux};font-weight:600">${varTaux > 0 ? '+' : ''}${varTaux}% taux</div>
+        <div style="color:${couleurCout};font-weight:600">${varCout > 0 ? '+' : ''}${varCout.toFixed(2)} € coût</div>
+        <div>${varProb > 0 ? '+' : ''}${varProb} anomalies</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">${fmtMois(d.mois2.mois)}</div>
+        <div style="font-size:0.9rem;margin-top:0.5rem">
+          <div>${d.mois2.total} interventions</div>
+          <div>${d.mois2.problemes} anomalies (${d.mois2.taux}%)</div>
+          <div style="font-weight:600">${d.mois2.cout_estime.toFixed(2)} € estimés</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function getBadgeClass(type) {
+  if (type === 'Manquée') return 'danger';
+  if (type === 'Badgeage partiel') return 'warning';
+  if (type === 'Trop courte') return 'info';
+  if (type === 'Trop longue') return 'secondary';
+  return 'default';
+}
+
+chargerMois().then(() => charger());
+</script>
+{% endblock %}
