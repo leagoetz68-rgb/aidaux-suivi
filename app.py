@@ -334,3 +334,43 @@ if __name__ == "__main__":
     host = os.environ.get("AIDAUX_HOST", "127.0.0.1")
     debug = host == "127.0.0.1"  # pas de mode debug en réseau
     app.run(debug=debug, host=host, port=5000)
+# ─────────────────────────────────────────────────────────
+# API Analyses financières & alertes
+# ─────────────────────────────────────────────────────────
+
+@app.route("/api/impact_financier")
+def api_impact_financier():
+    mois = request.args.get("mois") or None
+    date_debut = request.args.get("date_debut") or None
+    date_fin = request.args.get("date_fin") or None
+    data = db.impact_financier(mois=mois, date_debut=date_debut, date_fin=date_fin)
+    risque = db.risque_facturation(mois=mois)
+    data["nb_risque_facturation"] = len(risque)
+    data["risque_facturation"] = risque[:20]  # top 20
+    for r in data["risque_facturation"]:
+        r["date_prevue"] = fmt_date_fr(r["date_prevue"])
+    return jsonify(data)
+
+
+@app.route("/api/alertes")
+def api_alertes():
+    mois = request.args.get("mois") or None
+    alertes = db.alertes_cloture(mois=mois)
+    for a in alertes:
+        a["date_prevue"] = fmt_date_fr(a["date_prevue"])
+        a["diff_minutes"] = fmt_diff(a["diff_minutes"])
+    return jsonify({"alertes": alertes, "total": len(alertes)})
+
+
+@app.route("/api/comparaison")
+def api_comparaison():
+    mois1 = request.args.get("mois1") or None
+    mois2 = request.args.get("mois2") or None
+    if not mois1 or not mois2:
+        return jsonify({"error": "Deux mois requis"}), 400
+    return jsonify(db.comparaison_periodes(mois1, mois2))
+
+
+@app.route("/financier")
+def page_financier():
+    return render_template("financier.html", page="financier")
