@@ -55,6 +55,147 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_type ON interventions(type_probleme)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_date ON interventions(date_prevue)")
 
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS intervenant_emails (
+            intervenant TEXT PRIMARY KEY,
+            email       TEXT NOT NULL
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS rappels_envoyes (
+            intervention_id INTEGER PRIMARY KEY,
+            envoye_at       TEXT
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS rappel_tokens (
+            token           TEXT PRIMARY KEY,
+            intervenant     TEXT,
+            intervention_ids TEXT,
+            created_at      TEXT
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS reponses_badgeage (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            token       TEXT,
+            intervenant TEXT,
+            raison      TEXT,
+            commentaire TEXT,
+            repondu_at  TEXT
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS meta (
+            key   TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+def get_meta(key):
+    conn = get_conn()
+    row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    conn.close()
+    return row["value"] if row else None
+
+
+def set_meta(key, value):
+    conn = get_conn()
+    conn.execute("""
+        INSERT INTO meta (key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    """, (key, value))
+    conn.commit()
+    conn.close()
+
+
+def create_rappel_token(intervenant, intervention_ids):
+    import secrets
+    token = secrets.token_urlsafe(16)
+    conn = get_conn()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute(
+        "INSERT INTO rappel_tokens (token, intervenant, intervention_ids, created_at) VALUES (?, ?, ?, ?)",
+        (token, intervenant, ",".join(str(i) for i in intervention_ids), now),
+    )
+    conn.commit()
+    conn.close()
+    return token
+
+
+def get_rappel_token(token):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM rappel_tokens WHERE token = ?", (token,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def save_reponse_badgeage(token, intervenant, raison, commentaire):
+    conn = get_conn()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute(
+        "INSERT INTO reponses_badgeage (token, intervenant, raison, commentaire, repondu_at) VALUES (?, ?, ?, ?, ?)",
+        (token, intervenant, raison, commentaire, now),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_reponses_badgeage():
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM reponses_badgeage ORDER BY repondu_at DESC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_intervenant_emails():
+    conn = get_conn()
+    rows = conn.execute("SELECT intervenant, email FROM intervenant_emails ORDER BY intervenant").fetchall()
+    conn.close()
+    return {r["intervenant"]: r["email"] for r in rows}
+
+
+def set_intervenant_email(intervenant, email):
+    conn = get_conn()
+    conn.execute("""
+        INSERT INTO intervenant_emails (intervenant, email) VALUES (?, ?)
+        ON CONFLICT(intervenant) DO UPDATE SET email = excluded.email
+    """, (intervenant, email))
+    conn.commit()
+    conn.close()
+
+
+def get_unnotified_manquees():
+    """Interventions 'Manquée' pour lesquelles aucun rappel n'a encore été envoyé."""
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT i.id, i.intervenant, i.client, i.date_prevue
+        FROM interventions i
+        LEFT JOIN rappels_envoyes r ON r.intervention_id = i.id
+        WHERE i.type_probleme = 'Manquée' AND r.intervention_id IS NULL
+        ORDER BY i.intervenant, i.date_prevue
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def marquer_rappel_envoye(intervention_ids):
+    if not intervention_ids:
+        return
+    conn = get_conn()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn.executemany(
+        "INSERT OR IGNORE INTO rappels_envoyes (intervention_id, envoye_at) VALUES (?, ?)",
+        [(i, now) for i in intervention_ids],
+    )
     conn.commit()
     conn.close()
 
@@ -640,3 +781,4 @@ def impact_financier_par_intervenant(mois=None):
         r["total_heures"] = round(r["total_minutes"] / 60, 1)
     result.sort(key=lambda x: x["cout_estime"], reverse=True)
     return result
+
