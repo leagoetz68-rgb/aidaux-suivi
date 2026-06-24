@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Questionnaire badgeage — Aid'aux suivi</title>
+  <link rel="icon" type="image/svg+xml" href="/static/logo.svg" />
+  <style>
+    body{font-family:system-ui,sans-serif;background:#f4f5f7;margin:0;padding:24px;display:flex;justify-content:center}
+    .card{background:#fff;border-radius:12px;padding:32px;max-width:480px;width:100%;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+    h1{font-size:20px;margin-top:0}
+    label{display:block;font-weight:600;margin:14px 0 6px}
+    select,textarea{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box}
+    button{margin-top:20px;background:#000F9F;color:#fff;border:none;padding:12px 20px;border-radius:8px;font-size:15px;cursor:pointer;width:100%}
+    .muted{color:#666;font-size:14px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    {% if invalide %}
+      <h1>Lien invalide</h1>
+      <p class="muted">Ce lien de questionnaire n'est plus valide ou a déjà expiré.</p>
+    {% elif merci %}
+      <h1>Merci {{ intervenant }} !</h1>
+      <p class="muted">Votre réponse a bien été enregistrée.</p>
+    {% else %}
+      <h1>Bonjour {{ intervenant }}</h1>
+      <p class="muted">Le système a détecté {{ nb }} intervention(s) sans badgeage cette semaine. Pouvez-vous nous indiquer pourquoi ?</p>
+      <form method="post">
+        <label for="raison">Raison</label>
+        <select name="raison" id="raison" required>
+          <option value="">Sélectionner…</option>
+          {% for r in raisons %}
+          <option value="{{ r }}">{{ r }}</option>
+          {% endfor %}
+        </select>
+        <label for="commentaire">Commentaire (facultatif)</label>
+        <textarea name="commentaire" id="commentaire" rows="4" placeholder="Précisions…"></textarea>
+        <button type="submit">Envoyer</button>
+      </form>
+    {% endif %}
+  </div>
+</body>
+</html>
