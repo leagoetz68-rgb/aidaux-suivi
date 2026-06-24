@@ -8,6 +8,7 @@ from flask import Flask, jsonify, render_template, request, send_file, session, 
 
 import database as db
 from parser import parse_csv_to_rows
+import notifications
 
 app = Flask(__name__)
 app.secret_key = "aidaux-suivi-secret-2026"
@@ -18,10 +19,14 @@ APP_PASSWORD = "AidAux2931&&"
 
 @app.before_request
 def check_login():
-    if request.endpoint in ("login", "static"):
+    if request.endpoint in ("login", "static", "page_questionnaire"):
         return
     if not session.get("logged_in"):
         return redirect(url_for("login"))
+    try:
+        notifications.verifier_et_envoyer_rappel_hebdomadaire()
+    except Exception:
+        pass  # un échec d'envoi ne doit jamais bloquer la navigation
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -41,7 +46,6 @@ def logout():
 # Libellés et couleurs des types de problèmes (partagés)
 PROBLEM_TYPES = ["Manquée", "Badgeage partiel", "Trop courte", "Trop longue"]
 
-
 def fmt_date_fr(iso):
     """'2026-05-04 09:00' → '04/05/2026 09:00'."""
     if not iso:
@@ -53,13 +57,11 @@ def fmt_date_fr(iso):
     except Exception:
         return iso
 
-
 def fmt_diff(val):
     if val is None:
         return ""
     sign = "+" if val >= 0 else ""
     return f"{sign}{val:.0f} min"
-
 
 # ─────────────────────────────────────────────────────────
 # PAGES (rendu serveur)
@@ -69,31 +71,25 @@ def fmt_diff(val):
 def page_accueil():
     return render_template("accueil.html", page="accueil")
 
-
 @app.route("/import")
 def page_import():
     return render_template("import.html", page="import")
-
 
 @app.route("/interventions")
 def page_interventions():
     return render_template("interventions.html", page="interventions")
 
-
 @app.route("/intervenants")
 def page_intervenants():
     return render_template("intervenants.html", page="intervenants")
-
 
 @app.route("/mensuel")
 def page_mensuel():
     return render_template("mensuel.html", page="mensuel")
 
-
 @app.route("/rapports")
 def page_rapports():
     return render_template("rapports.html", page="rapports")
-
 
 # ─────────────────────────────────────────────────────────
 # API
@@ -132,6 +128,66 @@ def api_upload():
 
     return jsonify({"results": results})
 
+@app.route("/api/intervenant_emails", methods=["GET", "POST"])
+def api_intervenant_emails():
+    if request.method == "POST":
+        intervenant = request.json.get("intervenant")
+        email = request.json.get("email")
+        if not intervenant or not email:
+            return jsonify({"error": "intervenant et email requis"}), 400
+        db.set_intervenant_email(intervenant, email)
+        return jsonify({"ok": True})
+    return jsonify(db.get_intervenant_emails())
+
+@app.route("/api/send_reminders", methods=["POST"])
+def api_send_reminders():
+    resultats = notifications.envoyer_rappel_hebdomadaire()
+    return jsonify({"results": resultats})
+
+# ── Questionnaire de badgeage (accès public via lien envoyé par email) ──
+
+RAISONS_BADGEAGE = [
+    "Oubli de badger",
+    "Problème technique / appareil",
+    "Urgence chez le bénéficiaire",
+    "Absence du bénéficiaire",
+    "Autre",
+]
+
+@app.route("/questionnaire/<token>", methods=["GET", "POST"])
+def page_questionnaire(token):
+    rappel = db.get_rappel_token(token)
+    if not rappel:
+        return render_template("questionnaire.html", invalide=True, page="questionnaire")
+
+    if request.method == "POST":
+        raison = request.form.get("raison", "").strip()
+        commentaire = request.form.get("commentaire", "").strip()
+        if raison:
+            db.save_reponse_badgeage(token, rappel["intervenant"], raison, commentaire)
+        return render_template(
+            "questionnaire.html", merci=True, intervenant=rappel["intervenant"], page="questionnaire"
+        )
+
+    nb = len(rappel["intervention_ids"].split(",")) if rappel["intervention_ids"] else 0
+    return render_template(
+        "questionnaire.html",
+        intervenant=rappel["intervenant"],
+        nb=nb,
+        raisons=RAISONS_BADGEAGE,
+        page="questionnaire",
+    )
+
+@app.route("/reponses")
+def page_reponses():
+    return render_template("reponses.html", page="reponses")
+
+@app.route("/api/reponses")
+def api_reponses():
+    reponses = db.get_reponses_badgeage()
+    for r in reponses:
+        r["repondu_at"] = fmt_date_fr(r["repondu_at"]) if r.get("repondu_at") else ""
+    return jsonify(reponses)
 
 @app.route("/api/accueil")
 def api_accueil():
@@ -150,7 +206,6 @@ def api_accueil():
         "evolution": evolution,
         "imports": imports,
     })
-
 
 @app.route("/api/stats")
 def api_stats():
@@ -174,7 +229,6 @@ def api_stats():
             "pct": pct(stats["courtes"] + stats["longues"]),
         },
     })
-
 
 @app.route("/api/interventions")
 def api_interventions():
@@ -212,16 +266,13 @@ def api_interventions():
 
     return jsonify({"rows": out, "total": total, "page": page, "total_pages": total_pages})
 
-
 @app.route("/api/intervenants")
 def api_intervenants():
     return jsonify(db.get_intervenants())
 
-
 @app.route("/api/mois")
 def api_mois():
     return jsonify(db.get_mois_list())
-
 
 @app.route("/api/export")
 def api_export():
@@ -250,12 +301,10 @@ def api_export():
         download_name="interventions_problemes.csv",
     )
 
-
 @app.route("/api/reset", methods=["POST"])
 def api_reset():
     db.clear_all()
     return jsonify({"ok": True})
-
 
 @app.route("/api/imports")
 def api_imports():
@@ -265,20 +314,17 @@ def api_imports():
         i["period_max"] = fmt_date_fr(i["period_max"])
     return jsonify(imports)
 
-
 @app.route("/api/delete_import", methods=["POST"])
 def api_delete_import():
     import_id = request.json.get("id")
     n = db.delete_import(import_id)
     return jsonify({"deleted": n})
 
-
 @app.route("/api/delete_intervention", methods=["POST"])
 def api_delete_intervention():
     interv_id = request.json.get("id")
     n = db.delete_intervention(interv_id)
     return jsonify({"deleted": n})
-
 
 # ── Rapports par intervenant ──
 
@@ -289,14 +335,12 @@ def api_stats_intervenants():
     moyenne = round(sum(s["taux"] for s in data) / len(data), 1) if data else 0
     return jsonify({"intervenants": data, "moyenne_taux": moyenne})
 
-
 @app.route("/api/detail_intervenant")
 def api_detail_intervenant():
     nom = request.args.get("intervenant")
     if not nom:
         return jsonify({"error": "Intervenant manquant"}), 400
     return jsonify(db.detail_intervenant(nom))
-
 
 # ── Suivi mensuel ──
 
@@ -306,7 +350,6 @@ def api_mensuel():
         "mois": db.stats_mensuelles_detaillees(),
         "top_clients": db.top_clients_problemes(limit=10),
     })
-
 
 # ── Export PowerPoint ──
 
@@ -326,7 +369,6 @@ def api_rapport_pptx():
         as_attachment=True,
         download_name=f"rapport_aidaux{suffixe}.pptx",
     )
-
 
 if __name__ == "__main__":
     # HOST=0.0.0.0 → accessible depuis le réseau local (mode serveur partagé)
@@ -352,7 +394,6 @@ def api_impact_financier():
         data["par_intervenant"] = db.impact_financier_par_intervenant(mois=mois)
     return jsonify(data)
 
-
 @app.route("/api/alertes")
 def api_alertes():
     mois = request.args.get("mois") or None
@@ -361,7 +402,6 @@ def api_alertes():
         a["date_prevue"] = fmt_date_fr(a["date_prevue"])
         a["diff_minutes"] = fmt_diff(a["diff_minutes"])
     return jsonify({"alertes": alertes, "total": len(alertes)})
-
 
 @app.route("/api/comparaison")
 def api_comparaison():
