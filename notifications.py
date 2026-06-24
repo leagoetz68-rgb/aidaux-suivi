@@ -1,15 +1,16 @@
 # notifications.py — Envoi du rappel hebdomadaire par email aux intervenants n'ayant pas badgé
 
 import os
-import smtplib
 from collections import defaultdict
 from datetime import datetime, timedelta
-from email.mime.text import MIMEText
+
+import requests
 
 import database as db
 
-GMAIL_USER = os.environ.get("GMAIL_USER")
-GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
+EXPEDITEUR_EMAIL = os.environ.get("EXPEDITEUR_EMAIL", "lea.goetz@aidaux.fr")
+EXPEDITEUR_NOM = os.environ.get("EXPEDITEUR_NOM", "Aid'Aux")
 APP_URL = os.environ.get("APP_URL", "https://aidaux-suivi.onrender.com")
 
 INTERVALLE_HEBDO_JOURS = 7
@@ -27,18 +28,26 @@ def fmt_date_fr(iso):
 
 
 def envoyer_mail(destinataire, sujet, corps):
-    if not GMAIL_USER or not GMAIL_APP_PASSWORD:
-        raise RuntimeError("GMAIL_USER / GMAIL_APP_PASSWORD non configurés")
+    if not BREVO_API_KEY:
+        raise RuntimeError("BREVO_API_KEY non configurée")
 
-    msg = MIMEText(corps)
-    msg["Subject"] = sujet
-    msg["From"] = GMAIL_USER
-    msg["To"] = destinataire
-
-    with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as smtp:
-        smtp.starttls()
-        smtp.login(GMAIL_USER, GMAIL_APP_PASSWORD)
-        smtp.send_message(msg)
+    reponse = requests.post(
+        "https://api.brevo.com/v3/smtp/email",
+        headers={
+            "api-key": BREVO_API_KEY,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        json={
+            "sender": {"name": EXPEDITEUR_NOM, "email": EXPEDITEUR_EMAIL},
+            "to": [{"email": destinataire}],
+            "subject": sujet,
+            "textContent": corps,
+        },
+        timeout=10,
+    )
+    if reponse.status_code >= 300:
+        raise RuntimeError(f"Brevo a refusé l'envoi ({reponse.status_code}) : {reponse.text}")
 
 
 def envoyer_rappel_hebdomadaire():
