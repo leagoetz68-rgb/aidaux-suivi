@@ -113,7 +113,7 @@ def api_upload():
         tmp.close()
         try:
             rows = parse_csv_to_rows(tmp.name)
-                       added, updated, pmin, pmax = db.insert_interventions(rows, f.filename)
+            added, updated, pmin, pmax = db.insert_interventions(rows, f.filename)
             results.append({
                 "filename": f.filename,
                 "added": added,
