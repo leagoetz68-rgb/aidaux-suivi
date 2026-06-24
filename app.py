@@ -113,11 +113,11 @@ def api_upload():
         tmp.close()
         try:
             rows = parse_csv_to_rows(tmp.name)
-            added, skipped, pmin, pmax = db.insert_interventions(rows, f.filename)
+                       added, updated, pmin, pmax = db.insert_interventions(rows, f.filename)
             results.append({
                 "filename": f.filename,
                 "added": added,
-                "skipped": skipped,
+                "skipped": updated,
                 "period_min": fmt_date_fr(pmin),
                 "period_max": fmt_date_fr(pmax),
             })
