@@ -215,9 +215,11 @@ def _build_name_map(conn, column):
 def insert_interventions(rows, filename):
     """
     Insère une liste de dicts d'interventions.
-    Ignore les doublons (même client + intervenant + date_prevue).
+    Si une ligne existe déjà (même client + intervenant + date_prevue), ses
+    données sont mises à jour avec les nouvelles valeurs (ex : badgeage
+    ajouté depuis Ximi après un premier export sans télégestion).
     Canonicalise les noms (fusionne les variantes de casse/accents).
-    Retourne (nb_ajoutées, nb_ignorées, period_min, period_max).
+    Retourne (nb_ajoutées, nb_mises_à_jour, period_min, period_max).
     """
     from parser import normalize_name
 
@@ -236,7 +238,7 @@ def insert_interventions(rows, filename):
         return m[key]
 
     added = 0
-    skipped = 0
+    updated = 0
     dates = []
 
     for r in rows:
@@ -254,10 +256,20 @@ def insert_interventions(rows, filename):
                 r["diff_minutes"], r["type_probleme"], filename, now
             ))
             added += 1
-            if r["date_prevue"]:
-                dates.append(r["date_prevue"])
         except sqlite3.IntegrityError:
-            skipped += 1
+            c.execute("""
+                UPDATE interventions
+                SET mois=?, duree=?, debut_reel=?, fin_reelle=?, timing=?,
+                    diff_minutes=?, type_probleme=?, source_file=?, imported_at=?
+                WHERE client=? AND intervenant=? AND date_prevue=?
+            """, (
+                r["mois"], r["duree"], r["debut_reel"], r["fin_reelle"], r["timing"],
+                r["diff_minutes"], r["type_probleme"], filename, now,
+                r["client"], r["intervenant"], r["date_prevue"]
+            ))
+            updated += 1
+        if r["date_prevue"]:
+            dates.append(r["date_prevue"])
 
     period_min = min(dates) if dates else None
     period_max = max(dates) if dates else None
@@ -265,12 +277,11 @@ def insert_interventions(rows, filename):
     c.execute("""
         INSERT INTO imports (filename, imported_at, rows_added, rows_skipped, period_min, period_max)
         VALUES (?,?,?,?,?,?)
-    """, (filename, now, added, skipped, period_min, period_max))
+    """, (filename, now, added, updated, period_min, period_max))
 
     conn.commit()
     conn.close()
-    return added, skipped, period_min, period_max
-
+    return added, updated, period_min, period_max
 
 def query_interventions(intervenant=None, type_probleme=None, mois=None,
                         date_debut=None, date_fin=None, problems_only=False,
