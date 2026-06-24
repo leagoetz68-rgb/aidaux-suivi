@@ -25,6 +25,8 @@ async function init(){
   load();
 }
 
+let emails = {};
+
 async function load(){
   showLoading(true);
   try {
@@ -33,8 +35,20 @@ async function load(){
     const d = await (await fetch(`/api/stats_intervenants${q}`)).json();
     allData = d.intervenants;
     moyenne = d.moyenne_taux;
+    emails = await (await fetch("/api/intervenant_emails")).json();
     render();
   } finally { showLoading(false); }
+}
+
+async function saveEmail(nom, input){
+  const email = input.value.trim();
+  if (!email) return;
+  await fetch("/api/intervenant_emails", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ intervenant: nom, email }),
+  });
+  emails[nom] = email;
 }
 
 function render(){
@@ -44,17 +58,20 @@ function render(){
     `${data.length} intervenant${data.length>1?"s":""} · moyenne ${moyenne}%`;
 
   const tbody = document.getElementById("table-body");
-  if (!data.length){ tbody.innerHTML = `<tr><td colspan="9" class="empty-state">Aucun résultat.</td></tr>`; return; }
+  if (!data.length){ tbody.innerHTML = `<tr><td colspan="10" class="empty-state">Aucun résultat.</td></tr>`; return; }
 
   tbody.innerHTML = data.map(d => {
     const cls = d.taux > moyenne ? "taux-high" : "taux-ok";
+    const nomEch = d.intervenant.replace(/'/g,"\\'");
     return `<tr>
       <td><strong>${d.intervenant}</strong></td>
       <td>${d.total}</td>
       <td>${d.problemes}</td>
       <td><span class="taux-badge ${cls}">${d.taux}%</span></td>
       <td>${d.manquees}</td><td>${d.partiels}</td><td>${d.courtes}</td><td>${d.longues}</td>
-      <td><button class="btn-link" onclick="openDetail('${d.intervenant.replace(/'/g,"\\'")}')">Voir →</button></td>
+      <td><input type="email" placeholder="email…" value="${emails[d.intervenant] || ""}"
+            onblur="saveEmail('${nomEch}', this)" style="width:160px" /></td>
+      <td><button class="btn-link" onclick="openDetail('${nomEch}')">Voir →</button></td>
     </tr>`;
   }).join("");
 }
