@@ -1,16 +1,100 @@
-# database.py — Gestion de la base SQLite (stockage longitudinal des interventions)
+# database.py — Gestion de la base PostgreSQL (stockage longitudinal des interventions)
+#
+# Migré depuis SQLite vers PostgreSQL (Neon) pour éviter la perte de données
+# liée au système de fichiers éphémère de Render (plan gratuit).
+#
+# La couche de compatibilité ci-dessous (Row / _Cursor / _Connection) imite le
+# comportement de sqlite3.Row et sqlite3.Connection (accès aux colonnes par
+# index ET par nom, conn.execute() en raccourci, conversion automatique des
+# placeholders "?" en "%s") afin que le reste du fichier n'ait presque pas eu
+# besoin d'être modifié.
 
-import sqlite3
 import os
 from datetime import datetime
+import psycopg2
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "aidaux.db")
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+
+class Row:
+    """Mime sqlite3.Row : accès par row[0] OU row['colonne'], et dict(row)."""
+    __slots__ = ("_keys", "_values")
+
+    def __init__(self, description, values):
+        self._keys = [d[0] for d in description]
+        self._values = list(values)
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._values[key]
+        return self._values[self._keys.index(key)]
+
+    def keys(self):
+        return list(self._keys)
+
+    def __iter__(self):
+        return iter(self._values)
+
+    def __len__(self):
+        return len(self._values)
+
+    def __repr__(self):
+        return repr(dict(zip(self._keys, self._values)))
+
+
+class _Cursor:
+    def __init__(self, cur):
+        self._cur = cur
+
+    def execute(self, sql, params=None):
+        self._cur.execute(sql.replace("?", "%s"), params)
+        return self
+
+    def executemany(self, sql, seq):
+        self._cur.executemany(sql.replace("?", "%s"), seq)
+        return self
+
+    def fetchone(self):
+        row = self._cur.fetchone()
+        return None if row is None else Row(self._cur.description, row)
+
+    def fetchall(self):
+        return [Row(self._cur.description, row) for row in self._cur.fetchall()]
+
+    @property
+    def rowcount(self):
+        return self._cur.rowcount
+
+
+class _Connection:
+    def __init__(self, pg_conn):
+        self._conn = pg_conn
+
+    def cursor(self):
+        return _Cursor(self._conn.cursor())
+
+    def execute(self, sql, params=None):
+        return self.cursor().execute(sql, params)
+
+    def executemany(self, sql, seq):
+        return self.cursor().executemany(sql, seq)
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        self._conn.close()
 
 
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if not DATABASE_URL:
+        raise RuntimeError(
+            "DATABASE_URL n'est pas défini. Ajoute la variable d'environnement "
+            "DATABASE_URL (chaîne de connexion Neon) dans les paramètres Render "
+            "(ou dans ton fichier .env en local)."
+        )
+    pg_conn = psycopg2.connect(DATABASE_URL)
+    return _Connection(pg_conn)
 
 
 def init_db():
@@ -20,7 +104,7 @@ def init_db():
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS interventions (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            id            SERIAL PRIMARY KEY,
             client        TEXT,
             intervenant   TEXT,
             date_prevue   TEXT,      -- ISO 'YYYY-MM-DD HH:MM'
@@ -39,7 +123,7 @@ def init_db():
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS imports (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            id           SERIAL PRIMARY KEY,
             filename     TEXT,
             imported_at  TEXT,
             rows_added   INTEGER,
@@ -80,7 +164,7 @@ def init_db():
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS reponses_badgeage (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            id          SERIAL PRIMARY KEY,
             token       TEXT,
             intervenant TEXT,
             raison      TEXT,
@@ -193,7 +277,8 @@ def marquer_rappel_envoye(intervention_ids):
     conn = get_conn()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn.executemany(
-        "INSERT OR IGNORE INTO rappels_envoyes (intervention_id, envoye_at) VALUES (?, ?)",
+        "INSERT INTO rappels_envoyes (intervention_id, envoye_at) VALUES (?, ?) "
+        "ON CONFLICT (intervention_id) DO NOTHING",
         [(i, now) for i in intervention_ids],
     )
     conn.commit()
@@ -244,29 +329,26 @@ def insert_interventions(rows, filename):
     for r in rows:
         r["intervenant"] = canon(r["intervenant"], map_interv)
         r["client"] = canon(r["client"], map_client)
-        try:
-            c.execute("""
-                INSERT INTO interventions
-                (client, intervenant, date_prevue, mois, duree, debut_reel,
-                 fin_reelle, timing, diff_minutes, type_probleme, source_file, imported_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-            """, (
-                r["client"], r["intervenant"], r["date_prevue"], r["mois"],
-                r["duree"], r["debut_reel"], r["fin_reelle"], r["timing"],
-                r["diff_minutes"], r["type_probleme"], filename, now
-            ))
+        c.execute("""
+            INSERT INTO interventions
+            (client, intervenant, date_prevue, mois, duree, debut_reel,
+             fin_reelle, timing, diff_minutes, type_probleme, source_file, imported_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT (client, intervenant, date_prevue) DO UPDATE SET
+                mois=excluded.mois, duree=excluded.duree, debut_reel=excluded.debut_reel,
+                fin_reelle=excluded.fin_reelle, timing=excluded.timing,
+                diff_minutes=excluded.diff_minutes, type_probleme=excluded.type_probleme,
+                source_file=excluded.source_file, imported_at=excluded.imported_at
+            RETURNING (xmax = 0) AS was_insert
+        """, (
+            r["client"], r["intervenant"], r["date_prevue"], r["mois"],
+            r["duree"], r["debut_reel"], r["fin_reelle"], r["timing"],
+            r["diff_minutes"], r["type_probleme"], filename, now
+        ))
+        result = c.fetchone()
+        if result is not None and result["was_insert"]:
             added += 1
-        except sqlite3.IntegrityError:
-            c.execute("""
-                UPDATE interventions
-                SET mois=?, duree=?, debut_reel=?, fin_reelle=?, timing=?,
-                    diff_minutes=?, type_probleme=?, source_file=?, imported_at=?
-                WHERE client=? AND intervenant=? AND date_prevue=?
-            """, (
-                r["mois"], r["duree"], r["debut_reel"], r["fin_reelle"], r["timing"],
-                r["diff_minutes"], r["type_probleme"], filename, now,
-                r["client"], r["intervenant"], r["date_prevue"]
-            ))
+        else:
             updated += 1
         if r["date_prevue"]:
             dates.append(r["date_prevue"])
@@ -364,7 +446,6 @@ def get_stats(intervenant=None, mois=None, date_debut=None, date_fin=None):
         f"AND type_probleme IS NOT NULL GROUP BY type_probleme", params
     ).fetchall()
 
-    # Non renseigné (N/A) : ni problème, ni OK
     na = c.execute(
         f"SELECT COUNT(*) FROM interventions {where} "
         f"AND type_probleme IS NULL AND COALESCE(timing,'') <> 'OK'", params
@@ -626,7 +707,6 @@ def impact_financier(mois=None, date_debut=None, date_fin=None):
 
     for r in rows:
         tp, diff, duree, date_str = r[0], r[1], r[2], r[3]
-        # Taux horaire selon date
         taux = 12.02
         if date_str:
             try:
@@ -792,4 +872,3 @@ def impact_financier_par_intervenant(mois=None):
         r["total_heures"] = round(r["total_minutes"] / 60, 1)
     result.sort(key=lambda x: x["cout_estime"], reverse=True)
     return result
-
