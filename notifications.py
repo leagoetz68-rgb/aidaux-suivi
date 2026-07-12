@@ -86,18 +86,27 @@ def envoyer_rappel_hebdomadaire(date_debut=None, date_fin=None):
         lien = f"{APP_URL}/questionnaire/{token}"
 
         lignes = "\n".join(
-            f"- {fmt_date_fr(it['date_prevue'])} chez {it['client']}" for it in items
+            f"- chez {it['client']}, le {fmt_date_fr(it['date_prevue'])}" for it in items
         )
         corps = (
             f"Bonjour {intervenant},\n\n"
-            f"Cette semaine, le système a détecté {len(items)} intervention(s) sans badgeage :\n\n"
+            f"Nous constatons une absence de badgeage concernant les interventions "
+            f"suivantes :\n\n"
             f"{lignes}\n\n"
-            f"Merci de nous indiquer la raison en répondant à ce court questionnaire :\n"
-            f"{lien}\n\n"
-            f"Cela ne prend qu'une minute.\n"
+            f"Nous vous rappelons que le badgeage à l'arrivée et au départ de chaque "
+            f"prestation est obligatoire afin d'assurer le suivi du temps de travail, "
+            f"la fiabilité de la paie ainsi que la traçabilité des interventions auprès "
+            f"des bénéficiaires.\n\n"
+            f"Nous vous remercions de bien vouloir vérifier votre badgeage et de "
+            f"contacter l'agence dans les meilleurs délais afin de régulariser la "
+            f"situation si nécessaire, ou de nous indiquer la raison via ce court "
+            f"questionnaire :\n{lien}\n\n"
+            f"Nous comptons sur votre vigilance lors de vos prochaines interventions.\n\n"
+            f"Cordialement,\n"
+            f"La Direction\n"
         )
         try:
-            envoyer_mail(email, "Rappel hebdomadaire — intervention(s) sans badgeage", corps)
+            envoyer_mail(email, "Absence de badgeage", corps)
             resultats.append({"intervenant": intervenant, "email": email, "nb": len(items)})
             notifies_ids.extend(ids)
         except Exception as e:
