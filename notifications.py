@@ -50,15 +50,20 @@ def envoyer_mail(destinataire, sujet, corps):
         raise RuntimeError(f"Brevo a refusé l'envoi ({reponse.status_code}) : {reponse.text}")
 
 
-def envoyer_rappel_hebdomadaire():
+def envoyer_rappel_hebdomadaire(date_debut=None, date_fin=None):
     """
     Regroupe par intervenant toutes les interventions 'Manquée' jamais
-    notifiées et envoie un seul email récapitulatif hebdomadaire à chacun,
-    avec un lien vers un questionnaire en ligne pour expliquer l'absence
-    de badgeage. Marque les interventions comme notifiées.
+    notifiées et envoie un seul email récapitulatif à chacun, avec un lien
+    vers un questionnaire en ligne pour expliquer l'absence de badgeage.
+    Marque les interventions comme notifiées.
+
+    date_debut / date_fin ('YYYY-MM-DD') limitent la relance à une période
+    donnée (ex : aujourd'hui, cette semaine) au lieu de reprendre tout
+    l'historique jamais notifié.
+
     Retourne la liste des envois effectués (ou en erreur).
     """
-    manquees = db.get_unnotified_manquees()
+    manquees = db.get_unnotified_manquees(date_debut, date_fin)
     if not manquees:
         return []
 
@@ -106,8 +111,10 @@ def verifier_et_envoyer_rappel_hebdomadaire():
     """
     Déclenche l'envoi du rappel hebdomadaire si au moins
     INTERVALLE_HEBDO_JOURS jours se sont écoulés depuis le dernier envoi
-    (ou si aucun envoi n'a jamais eu lieu). Conçu pour être appelé à
-    chaque requête : le coût est négligeable si la date n'est pas atteinte.
+    (ou si aucun envoi n'a jamais eu lieu). Ne couvre que les interventions
+    manquées des 7 derniers jours, pas tout l'historique jamais notifié.
+    Conçu pour être appelé à chaque requête ou via un cron : le coût est
+    négligeable si la date n'est pas atteinte.
     """
     dernier = db.get_meta("dernier_envoi_hebdo")
     maintenant = datetime.now()
@@ -119,5 +126,7 @@ def verifier_et_envoyer_rappel_hebdomadaire():
         except Exception:
             pass
 
+    date_debut = (maintenant - timedelta(days=INTERVALLE_HEBDO_JOURS)).strftime("%Y-%m-%d")
+    date_fin = maintenant.strftime("%Y-%m-%d")
     db.set_meta("dernier_envoi_hebdo", maintenant.strftime("%Y-%m-%d %H:%M:%S"))
-    return envoyer_rappel_hebdomadaire()
+    return envoyer_rappel_hebdomadaire(date_debut, date_fin)
