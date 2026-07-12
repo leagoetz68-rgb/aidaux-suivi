@@ -190,20 +190,25 @@ def page_questionnaire(token):
     if not rappel:
         return render_template("questionnaire.html", invalide=True, page="questionnaire")
 
+    ids = [int(i) for i in rappel["intervention_ids"].split(",")] if rappel["intervention_ids"] else []
+
     if request.method == "POST":
-        raison = request.form.get("raison", "").strip()
-        commentaire = request.form.get("commentaire", "").strip()
-        if raison:
-            db.save_reponse_badgeage(token, rappel["intervenant"], raison, commentaire)
+        for iid in ids:
+            raison = request.form.get(f"raison_{iid}", "").strip()
+            commentaire = request.form.get(f"commentaire_{iid}", "").strip()
+            if raison:
+                db.save_reponse_badgeage(token, rappel["intervenant"], iid, raison, commentaire)
         return render_template(
             "questionnaire.html", merci=True, intervenant=rappel["intervenant"], page="questionnaire"
         )
 
-    nb = len(rappel["intervention_ids"].split(",")) if rappel["intervention_ids"] else 0
+    interventions = db.get_interventions_by_ids(ids)
+    for it in interventions:
+        it["date_prevue_fr"] = fmt_date_fr(it["date_prevue"])
     return render_template(
         "questionnaire.html",
         intervenant=rappel["intervenant"],
-        nb=nb,
+        interventions=interventions,
         raisons=RAISONS_BADGEAGE,
         page="questionnaire",
     )
@@ -222,6 +227,7 @@ def api_reponses():
     reponses = db.get_reponses_badgeage()
     for r in reponses:
         r["repondu_at"] = fmt_date_fr(r["repondu_at"]) if r.get("repondu_at") else ""
+        r["date_prevue"] = fmt_date_fr(r["date_prevue"]) if r.get("date_prevue") else ""
     return jsonify(reponses)
 
 @app.route("/api/accueil")
