@@ -257,16 +257,27 @@ def set_intervenant_email(intervenant, email):
     conn.close()
 
 
-def get_unnotified_manquees():
-    """Interventions 'Manquée' pour lesquelles aucun rappel n'a encore été envoyé."""
+def get_unnotified_manquees(date_debut=None, date_fin=None):
+    """
+    Interventions 'Manquée' pour lesquelles aucun rappel n'a encore été envoyé.
+    date_debut / date_fin (format 'YYYY-MM-DD') permettent de limiter la
+    relance à une période précise (aujourd'hui, cette semaine...) plutôt que
+    de reprendre tout l'historique jamais notifié.
+    """
     conn = get_conn()
-    rows = conn.execute("""
+    sql = """
         SELECT i.id, i.intervenant, i.client, i.date_prevue
         FROM interventions i
         LEFT JOIN rappels_envoyes r ON r.intervention_id = i.id
         WHERE i.type_probleme = 'Manquée' AND r.intervention_id IS NULL
-        ORDER BY i.intervenant, i.date_prevue
-    """).fetchall()
+    """
+    params = []
+    if date_debut:
+        sql += " AND i.date_prevue >= ?"; params.append(date_debut + " 00:00")
+    if date_fin:
+        sql += " AND i.date_prevue <= ?"; params.append(date_fin + " 23:59")
+    sql += " ORDER BY i.intervenant, i.date_prevue"
+    rows = conn.execute(sql, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
