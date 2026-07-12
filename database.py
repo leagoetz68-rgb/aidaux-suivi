@@ -167,11 +167,13 @@ def init_db():
             id          SERIAL PRIMARY KEY,
             token       TEXT,
             intervenant TEXT,
+            intervention_id INTEGER,
             raison      TEXT,
             commentaire TEXT,
             repondu_at  TEXT
         )
     """)
+    c.execute("ALTER TABLE reponses_badgeage ADD COLUMN IF NOT EXISTS intervention_id INTEGER")
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS meta (
@@ -222,20 +224,41 @@ def get_rappel_token(token):
     return dict(row) if row else None
 
 
-def save_reponse_badgeage(token, intervenant, raison, commentaire):
+def save_reponse_badgeage(token, intervenant, intervention_id, raison, commentaire):
     conn = get_conn()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn.execute(
-        "INSERT INTO reponses_badgeage (token, intervenant, raison, commentaire, repondu_at) VALUES (?, ?, ?, ?, ?)",
-        (token, intervenant, raison, commentaire, now),
+        "INSERT INTO reponses_badgeage (token, intervenant, intervention_id, raison, commentaire, repondu_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (token, intervenant, intervention_id, raison, commentaire, now),
     )
     conn.commit()
     conn.close()
 
 
+def get_interventions_by_ids(ids):
+    """Récupère id/client/date_prevue pour une liste d'interventions (pour le questionnaire)."""
+    if not ids:
+        return []
+    conn = get_conn()
+    placeholders = ",".join(["?"] * len(ids))
+    rows = conn.execute(
+        f"SELECT id, client, date_prevue FROM interventions WHERE id IN ({placeholders}) "
+        f"ORDER BY date_prevue",
+        ids,
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def get_reponses_badgeage():
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM reponses_badgeage ORDER BY repondu_at DESC").fetchall()
+    rows = conn.execute("""
+        SELECT r.*, i.client, i.date_prevue
+        FROM reponses_badgeage r
+        LEFT JOIN interventions i ON i.id = r.intervention_id
+        ORDER BY r.repondu_at DESC
+    """).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
