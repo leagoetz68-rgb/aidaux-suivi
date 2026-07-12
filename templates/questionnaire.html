@@ -25,17 +25,22 @@
       <p class="muted">Votre réponse a bien été enregistrée.</p>
     {% else %}
       <h1>Bonjour {{ intervenant }}</h1>
-      <p class="muted">Le système a détecté {{ nb }} intervention(s) sans badgeage cette semaine. Pouvez-vous nous indiquer pourquoi ?</p>
+      <p class="muted">Merci d'indiquer, pour chaque intervention ci-dessous, la raison de l'absence de badgeage.</p>
       <form method="post">
-        <label for="raison">Raison</label>
-        <select name="raison" id="raison" required>
-          <option value="">Sélectionner…</option>
-          {% for r in raisons %}
-          <option value="{{ r }}">{{ r }}</option>
-          {% endfor %}
-        </select>
-        <label for="commentaire">Commentaire (facultatif)</label>
-        <textarea name="commentaire" id="commentaire" rows="4" placeholder="Précisions…"></textarea>
+        {% for it in interventions %}
+        <div style="border-top:1px solid #eee;padding-top:14px;margin-top:14px">
+          <p style="font-weight:600;margin:0 0 8px">{{ it.client }} — {{ it.date_prevue_fr }}</p>
+          <label for="raison_{{ it.id }}">Raison</label>
+          <select name="raison_{{ it.id }}" id="raison_{{ it.id }}">
+            <option value="">Sélectionner…</option>
+            {% for r in raisons %}
+            <option value="{{ r }}">{{ r }}</option>
+            {% endfor %}
+          </select>
+          <label for="commentaire_{{ it.id }}">Commentaire (facultatif)</label>
+          <textarea name="commentaire_{{ it.id }}" id="commentaire_{{ it.id }}" rows="2" placeholder="Précisions…"></textarea>
+        </div>
+        {% endfor %}
         <button type="submit">Envoyer</button>
       </form>
     {% endif %}
