@@ -19,7 +19,7 @@ APP_PASSWORD = "AidAux2931&&"
 
 @app.before_request
 def check_login():
-    if request.endpoint in ("login", "static", "page_questionnaire"):
+    if request.endpoint in ("login", "static", "page_questionnaire", "api_cron_rappel_hebdo"):
         return
     if not session.get("logged_in"):
         return redirect(url_for("login"))
@@ -141,8 +141,38 @@ def api_intervenant_emails():
 
 @app.route("/api/send_reminders", methods=["POST"])
 def api_send_reminders():
-    resultats = notifications.envoyer_rappel_hebdomadaire()
-    return jsonify({"results": resultats})
+    from datetime import datetime, timedelta
+    body = request.get_json(silent=True) or {}
+    date_debut = body.get("date_debut")  # 'YYYY-MM-DD', optionnel
+    date_fin = body.get("date_fin")      # 'YYYY-MM-DD', optionnel
+
+    # Par défaut (aucune date fournie) : semaine en cours (lundi → dimanche)
+    if not date_debut and not date_fin:
+        maintenant = datetime.now()
+        lundi = maintenant - timedelta(days=maintenant.weekday())
+        dimanche = lundi + timedelta(days=6)
+        date_debut = lundi.strftime("%Y-%m-%d")
+        date_fin = dimanche.strftime("%Y-%m-%d")
+
+    resultats = notifications.envoyer_rappel_hebdomadaire(date_debut, date_fin)
+    return jsonify({"results": resultats, "date_debut": date_debut, "date_fin": date_fin})
+
+# ── Déclenchement automatique depuis un cron externe (GitHub Actions) ──
+# Indépendant de la navigation sur le site : une requête planifiée appelle
+# cette route chaque jour ; l'envoi ne part réellement que si 7 jours se
+# sont écoulés depuis le dernier rappel (logique gérée par notifications.py).
+
+CRON_SECRET = os.environ.get("CRON_SECRET")
+
+@app.route("/api/cron/rappel-hebdo", methods=["POST"])
+def api_cron_rappel_hebdo():
+    if not CRON_SECRET:
+        return jsonify({"error": "CRON_SECRET non configurée côté serveur"}), 500
+    secret_recu = request.headers.get("X-Cron-Secret", "")
+    if secret_recu != CRON_SECRET:
+        return jsonify({"error": "Non autorisé"}), 403
+    resultats = notifications.verifier_et_envoyer_rappel_hebdomadaire()
+    return jsonify({"declenche": resultats is not None, "results": resultats or []})
 
 # ── Questionnaire de badgeage (accès public via lien envoyé par email) ──
 
@@ -182,6 +212,11 @@ def page_questionnaire(token):
 def page_reponses():
     return render_template("reponses.html", page="reponses")
 
+@app.route("/api/dernier_envoi_hebdo")
+def api_dernier_envoi_hebdo():
+    dernier = db.get_meta("dernier_envoi_hebdo")
+    return jsonify({"dernier_envoi": fmt_date_fr(dernier) if dernier else None})
+
 @app.route("/api/reponses")
 def api_reponses():
     reponses = db.get_reponses_badgeage()
@@ -198,6 +233,7 @@ def api_accueil():
     evolution = db.get_monthly_evolution()
     imports = db.get_imports_history()[:5]
     for imp in imports:
+        imp["imported_at"] = fmt_date_fr(imp["imported_at"])
         imp["period_min"] = fmt_date_fr(imp["period_min"])
         imp["period_max"] = fmt_date_fr(imp["period_max"])
     return jsonify({
