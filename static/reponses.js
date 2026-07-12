@@ -61,11 +61,13 @@ async function load(){
       `${data.length} réponse${data.length>1?"s":""}`;
 
     const tbody = document.getElementById("table-body");
-    if (!data.length){ tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Aucune réponse pour le moment.</td></tr>`; return; }
+    if (!data.length){ tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Aucune réponse pour le moment.</td></tr>`; return; }
 
     tbody.innerHTML = data.map(r => `<tr>
       <td>${r.repondu_at}</td>
       <td><strong>${r.intervenant}</strong></td>
+      <td>${r.client || ""}</td>
+      <td>${r.date_prevue || ""}</td>
       <td>${r.raison}</td>
       <td>${r.commentaire || ""}</td>
     </tr>`).join("");
