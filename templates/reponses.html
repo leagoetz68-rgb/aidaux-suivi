@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block page_title %}Réponses badgeage{% endblock %}
-{% block page_subtitle %}Raisons indiquées par les intervenants suite aux rappels hebdomadaires.{% endblock %}
+{% block page_subtitle %}Raisons indiquées par les intervenants suite aux rappels.{% endblock %}
 
 {% block content %}
 
@@ -8,11 +8,11 @@
   <div class="table-header">
     <h3>Réponses reçues</h3>
     <span class="table-count" id="count"></span>
-    <label for="input-semaine" style="margin-left:auto;font-size:13px;color:#555">Semaine à relancer :</label>
-    <input type="week" id="input-semaine" style="border-radius:8px;border:1px solid #ccc;padding:7px 10px;font-size:14px">
-    <button id="btn-envoyer" type="button" style="margin-left:8px;background:#000F9F;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:14px;cursor:pointer">Envoyer les rappels pour cette semaine</button>
+    <label for="input-jour" style="margin-left:auto;font-size:13px;color:#555">Jour à relancer :</label>
+    <input type="date" id="input-jour" style="border-radius:8px;border:1px solid #ccc;padding:7px 10px;font-size:14px">
+    <button id="btn-envoyer" type="button" style="margin-left:8px;background:#000F9F;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:14px;cursor:pointer">Envoyer les rappels pour ce jour</button>
   </div>
-  <div id="semaine-resume" style="padding:0 20px 8px;font-size:13px;color:#888"></div>
+  <div id="jour-resume" style="padding:0 20px 8px;font-size:13px;color:#888"></div>
   <div id="dernier-envoi" style="padding:0 20px 8px;font-size:13px;color:#888"></div>
   <div id="envoi-resultat" style="padding:0 20px;font-size:14px;color:#444"></div>
   <div class="table-wrap">
@@ -28,5 +28,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/reponses.js?v=1"></script>
+<script src="/static/reponses.js?v=2"></script>
 {% endblock %}
