@@ -53,8 +53,8 @@ def envoyer_mail(destinataire, sujet, corps):
 def envoyer_rappel_hebdomadaire(date_debut=None, date_fin=None):
     """
     Regroupe par intervenant toutes les interventions 'Manquée' jamais
-    notifiées et envoie un seul email récapitulatif à chacun, avec un lien
-    vers un questionnaire en ligne pour expliquer l'absence de badgeage.
+    notifiées et envoie un seul email récapitulatif à chacun, en simple
+    rappel (sans lien vers un questionnaire).
     Marque les interventions comme notifiées.
 
     date_debut / date_fin ('YYYY-MM-DD') limitent la relance à une période
@@ -82,8 +82,6 @@ def envoyer_rappel_hebdomadaire(date_debut=None, date_fin=None):
             continue
 
         ids = [it["id"] for it in items]
-        token = db.create_rappel_token(intervenant, ids)
-        lien = f"{APP_URL}/questionnaire/{token}"
 
         lignes = "\n".join(
             f"- chez {it['client']}, le {fmt_date_fr(it['date_prevue'])}" for it in items
@@ -99,8 +97,7 @@ def envoyer_rappel_hebdomadaire(date_debut=None, date_fin=None):
             f"des bénéficiaires.\n\n"
             f"Nous vous remercions de bien vouloir vérifier votre badgeage et de "
             f"contacter l'agence dans les meilleurs délais afin de régulariser la "
-            f"situation si nécessaire, ou de nous indiquer la raison via ce court "
-            f"questionnaire :\n{lien}\n\n"
+            f"situation si nécessaire.\n\n"
             f"Nous comptons sur votre vigilance lors de vos prochaines interventions.\n\n"
             f"Cordialement,\n"
             f"La Direction\n"
