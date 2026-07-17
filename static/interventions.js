@@ -16,6 +16,12 @@ function moisLabel(m) {
   return `${noms[parseInt(mo,10)-1]} ${y}`;
 }
 
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
 function getFilters() {
   return {
     intervenant: document.getElementById("f-intervenant").value,
@@ -99,7 +105,7 @@ async function refreshTable(filters, page, signal) {
 function renderTable(rows) {
   const tbody = document.getElementById("table-body");
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="empty-state">Aucune intervention pour ces critères.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="empty-state">Aucune intervention pour ces critères.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(r => `
@@ -108,8 +114,31 @@ function renderTable(rows) {
       <td><span class="badge ${BADGE_CLASS[r.type_probleme]||""}">${r.type_probleme}</span></td>
       <td>${r.timing}</td><td>${r.diff_minutes}</td>
       <td>${r.debut_reel}</td><td>${r.fin_reelle}</td>
+      <td>
+        <textarea class="commentaire-input" data-id="${r.id}" rows="1"
+          style="width:160px;resize:vertical;font-size:12px;"
+          placeholder="Note interne…">${escapeHtml(r.commentaire)}</textarea>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;margin-top:2px;white-space:nowrap;">
+          <input type="checkbox" class="exclu-checkbox" data-id="${r.id}" ${r.exclu_relance ? "checked" : ""} />
+          Exclure des relances
+        </label>
+      </td>
       <td><button class="btn-link danger" onclick="deleteInterv(${r.id})" title="Supprimer">✕</button></td>
     </tr>`).join("");
+
+  tbody.querySelectorAll(".commentaire-input").forEach(el =>
+    el.addEventListener("blur", () => saveCommentaire(el.dataset.id)));
+  tbody.querySelectorAll(".exclu-checkbox").forEach(el =>
+    el.addEventListener("change", () => saveCommentaire(el.dataset.id)));
+}
+
+async function saveCommentaire(id) {
+  const commentaire = document.querySelector(`.commentaire-input[data-id="${id}"]`).value;
+  const exclu_relance = document.querySelector(`.exclu-checkbox[data-id="${id}"]`).checked;
+  await fetch("/api/commentaire_anomalie", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ id: parseInt(id, 10), commentaire, exclu_relance })
+  });
 }
 
 async function deleteInterv(id) {
