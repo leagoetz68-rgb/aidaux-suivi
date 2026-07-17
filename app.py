@@ -304,6 +304,8 @@ def api_interventions():
             "diff_minutes": fmt_diff(r["diff_minutes"]),
             "debut_reel": r["debut_reel"],
             "fin_reelle": r["fin_reelle"],
+            "commentaire": r["commentaire"] or "",
+            "exclu_relance": bool(r["exclu_relance"]),
         })
 
     return jsonify({"rows": out, "total": total, "page": page, "total_pages": total_pages})
@@ -367,6 +369,15 @@ def api_delete_intervention():
     interv_id = request.json.get("id")
     n = db.delete_intervention(interv_id)
     return jsonify({"deleted": n})
+
+@app.route("/api/commentaire_anomalie", methods=["POST"])
+def api_commentaire_anomalie():
+    data = request.json
+    interv_id = data.get("id")
+    commentaire = (data.get("commentaire") or "").strip()
+    exclu_relance = bool(data.get("exclu_relance"))
+    n = db.set_commentaire_anomalie(interv_id, commentaire, exclu_relance)
+    return jsonify({"updated": n})
 
 # ── Rapports par intervenant ──
 
