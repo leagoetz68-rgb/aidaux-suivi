@@ -120,6 +120,8 @@ def init_db():
             UNIQUE(client, intervenant, date_prevue)
         )
     """)
+    c.execute("ALTER TABLE interventions ADD COLUMN IF NOT EXISTS commentaire TEXT DEFAULT ''")
+    c.execute("ALTER TABLE interventions ADD COLUMN IF NOT EXISTS exclu_relance BOOLEAN DEFAULT FALSE")
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS imports (
@@ -282,7 +284,9 @@ def set_intervenant_email(intervenant, email):
 
 def get_unnotified_manquees(date_debut=None, date_fin=None):
     """
-    Interventions 'Manquée' pour lesquelles aucun rappel n'a encore été envoyé.
+    Interventions 'Manquée' pour lesquelles aucun rappel n'a encore été envoyé,
+    en excluant celles marquées comme "exclues des relances" (commentaire
+    interne justificatif).
     date_debut / date_fin (format 'YYYY-MM-DD') permettent de limiter la
     relance à une période précise (aujourd'hui, cette semaine...) plutôt que
     de reprendre tout l'historique jamais notifié.
@@ -293,6 +297,7 @@ def get_unnotified_manquees(date_debut=None, date_fin=None):
         FROM interventions i
         LEFT JOIN rappels_envoyes r ON r.intervention_id = i.id
         WHERE i.type_probleme = 'Manquée' AND r.intervention_id IS NULL
+          AND NOT COALESCE(i.exclu_relance, FALSE)
     """
     params = []
     if date_debut:
@@ -303,6 +308,24 @@ def get_unnotified_manquees(date_debut=None, date_fin=None):
     rows = conn.execute(sql, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def set_commentaire_anomalie(intervention_id, commentaire, exclu_relance):
+    """
+    Enregistre un commentaire interne sur une anomalie et indique si elle
+    doit être exclue des relances email (elle reste visible dans le
+    tableau et les stats).
+    """
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE interventions SET commentaire = ?, exclu_relance = ? WHERE id = ?",
+        (commentaire, exclu_relance, intervention_id),
+    )
+    conn.commit()
+    n = c.rowcount
+    conn.close()
+    return n
 
 
 def marquer_rappel_envoye(intervention_ids):
