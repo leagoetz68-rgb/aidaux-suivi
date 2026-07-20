@@ -12,6 +12,7 @@ BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
 EXPEDITEUR_EMAIL = os.environ.get("EXPEDITEUR_EMAIL", "lea.goetz@aidaux.fr")
 EXPEDITEUR_NOM = os.environ.get("EXPEDITEUR_NOM", "Aid'Aux")
 APP_URL = os.environ.get("APP_URL", "https://aidaux-suivi.onrender.com")
+BCC_SUPERIEUR = os.environ.get("BCC_SUPERIEUR", "magali.wolff@aidaux.fr")
 
 INTERVALLE_HEBDO_JOURS = 7
 
@@ -41,6 +42,7 @@ def envoyer_mail(destinataire, sujet, corps):
         json={
             "sender": {"name": EXPEDITEUR_NOM, "email": EXPEDITEUR_EMAIL},
             "to": [{"email": destinataire}],
+            "bcc": [{"email": BCC_SUPERIEUR}],
             "subject": sujet,
             "textContent": corps,
         },
