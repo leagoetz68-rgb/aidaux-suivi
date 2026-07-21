@@ -61,11 +61,8 @@ function render(){
   tbody.innerHTML = data.map(d => {
     const cls = d.taux > moyenne ? "taux-high" : "taux-ok";
     const nomEch = d.intervenant.replace(/'/g,"\\'");
-    const badge = d.recidiviste
-      ? `<span class="badge-recidive" title="${d.streak_recidive} mois consécutifs au-dessus du seuil">🔴 Récidive</span>`
-      : "";
     return `<tr>
-      <td><strong>${d.intervenant}</strong> ${badge}</td>
+      <td><strong>${d.intervenant}</strong></td>
       <td>${d.total}</td>
       <td>${d.problemes}</td>
       <td><span class="taux-badge ${cls}">${d.taux}%</span></td>
