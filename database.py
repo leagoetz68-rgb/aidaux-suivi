@@ -634,10 +634,52 @@ def get_all_imports():
 # Analyses pour rapports (par intervenant, classements)
 # ─────────────────────────────────────────────────────────
 
+def stats_recidivistes(seuil=60, min_mois_consecutifs=2):
+    """
+    Détecte les intervenants en récidive : taux de problèmes mensuel
+    >= seuil (%) pendant au moins min_mois_consecutifs mois consécutifs,
+    en partant du mois le plus récent.
+    Retourne un dict {intervenant: {"recidiviste": bool, "streak": n}}.
+    """
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT intervenant, mois,
+               COUNT(*) as total,
+               SUM(CASE WHEN type_probleme IS NOT NULL THEN 1 ELSE 0 END) as problemes
+        FROM interventions
+        WHERE mois IS NOT NULL AND intervenant IS NOT NULL
+        GROUP BY intervenant, mois
+        ORDER BY intervenant, mois DESC
+    """).fetchall()
+    conn.close()
+
+    par_intervenant = {}
+    for r in rows:
+        par_intervenant.setdefault(r["intervenant"], []).append({
+            "mois": r["mois"],
+            "taux": round(r["problemes"] / r["total"] * 100, 1) if r["total"] else 0,
+        })
+
+    result = {}
+    for nom, mois_liste in par_intervenant.items():
+        streak = 0
+        for m in mois_liste:
+            if m["taux"] >= seuil:
+                streak += 1
+            else:
+                break
+        result[nom] = {
+            "recidiviste": streak >= min_mois_consecutifs,
+            "streak": streak,
+        }
+    return result
+
+
 def stats_par_intervenant(mois=None):
     """
     Stats agrégées par intervenant (optionnellement filtrées sur un mois).
-    Retourne une liste de dicts triés par taux de problèmes décroissant.
+    Retourne une liste de dicts triés récidivistes d'abord, puis par taux
+    de problèmes décroissant.
     """
     conn = get_conn()
     where = "WHERE 1=1"
@@ -659,12 +701,17 @@ def stats_par_intervenant(mois=None):
     """, params).fetchall()
     conn.close()
 
+    recidivistes = stats_recidivistes()
+
     out = []
     for r in rows:
         d = dict(r)
         d["taux"] = round(d["problemes"] / d["total"] * 100, 1) if d["total"] else 0
+        info = recidivistes.get(d["intervenant"], {"recidiviste": False, "streak": 0})
+        d["recidiviste"] = info["recidiviste"]
+        d["streak_recidive"] = info["streak"]
         out.append(d)
-    out.sort(key=lambda x: x["taux"], reverse=True)
+    out.sort(key=lambda x: (x["recidiviste"], x["taux"]), reverse=True)
     return out
 
 
