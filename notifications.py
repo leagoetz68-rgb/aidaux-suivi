@@ -12,7 +12,7 @@ BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
 EXPEDITEUR_EMAIL = os.environ.get("EXPEDITEUR_EMAIL", "lea.goetz@aidaux.fr")
 EXPEDITEUR_NOM = os.environ.get("EXPEDITEUR_NOM", "Aid'Aux")
 APP_URL = os.environ.get("APP_URL", "https://aidaux-suivi.onrender.com")
-BCC_SUPERIEUR = os.environ.get("BCC_SUPERIEUR", "magali.wolff@aidaux.fr")
+BCC_SUPERIEUR = os.environ.get("BCC_SUPERIEUR", "lea.goetz@aidaux.fr")
 
 INTERVALLE_HEBDO_JOURS = 7
 
