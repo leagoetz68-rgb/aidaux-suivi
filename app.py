@@ -83,6 +83,10 @@ def page_interventions():
 def page_intervenants():
     return render_template("intervenants.html", page="intervenants")
 
+@app.route("/alertes")
+def page_alertes():
+    return render_template("alertes.html", page="alertes")
+
 @app.route("/mensuel")
 def page_mensuel():
     return render_template("mensuel.html", page="mensuel")
@@ -387,6 +391,11 @@ def api_stats_intervenants():
     data = db.stats_par_intervenant(mois=mois)
     moyenne = round(sum(s["taux"] for s in data) / len(data), 1) if data else 0
     return jsonify({"intervenants": data, "moyenne_taux": moyenne})
+
+@app.route("/api/recidivistes")
+def api_recidivistes():
+    data = db.get_recidivistes()
+    return jsonify({"recidivistes": data})
 
 @app.route("/api/detail_intervenant")
 def api_detail_intervenant():
