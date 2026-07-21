@@ -307,16 +307,3 @@ tbody td { padding: 11px 14px; }
   font-size: 15px; color: var(--navy); font-weight: 500;
 }
 #loading-overlay.active { display: flex; }
-
-/* ── BADGE RÉCIDIVE ── */
-.badge-recidive {
-  display: inline-block;
-  background: #C0392B;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 10px;
-  margin-left: 6px;
-  vertical-align: middle;
-}
