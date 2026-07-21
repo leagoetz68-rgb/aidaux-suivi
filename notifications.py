@@ -88,7 +88,7 @@ def envoyer_rappel_hebdomadaire(date_debut=None, date_fin=None):
         lignes = ", ".join(
             f"chez {it['client']} le {fmt_date_fr(it['date_prevue'])}" for it in items
         )
-        corps = (
+corps = (
             f"Bonjour {intervenant},\n\n"
             f"Nous constatons une absence de badgeage concernant l'intervention "
             f"{lignes}.\n\n"
@@ -96,14 +96,17 @@ def envoyer_rappel_hebdomadaire(date_debut=None, date_fin=None):
             f"obligatoire afin d'assurer le suivi du temps de travail, la "
             f"fiabilité de la paie ainsi que la traçabilité des interventions "
             f"auprès des bénéficiaires.\n\n"
-            f"Merci de contacter l'agence dans les meilleurs délais afin de "
-            f"régulariser cette situation.\n\n"
+            f"Merci de me contacter dans les meilleurs délais afin de "
+            f"justifier cette absence de badgeage.\n\n"
             f"Nous vous invitons par ailleurs à vérifier régulièrement votre "
-            f"badgeage au cours de la journée, et à nous prévenir par SMS dès "
-            f"qu'une anomalie est constatée (badgeage manquant à l'arrivée, au "
-            f"départ, ou sur l'ensemble de l'intervention).\n\n"
+            f"badgeage au cours de la journée et à me contacter directement, "
+            f"par mail ou SMS, dès qu'une anomalie est constatée (badgeage "
+            f"manquant à l'arrivée, au départ, ou sur l'ensemble de "
+            f"l'intervention).\n\n"
             f"Cordialement,\n"
-            f"La Direction\n"
+            f"Léa Goetz\n"
+            f"lea.goetz@aidaux.fr\n"
+            f"06 66 13 82 18\n"
         )
         try:
             envoyer_mail(email, "Absence de badgeage", corps)
