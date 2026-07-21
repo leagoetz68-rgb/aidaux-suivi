@@ -88,7 +88,7 @@ def envoyer_rappel_hebdomadaire(date_debut=None, date_fin=None):
         lignes = ", ".join(
             f"chez {it['client']} le {fmt_date_fr(it['date_prevue'])}" for it in items
         )
-corps = (
+        corps = (
             f"Bonjour {intervenant},\n\n"
             f"Nous constatons une absence de badgeage concernant l'intervention "
             f"{lignes}.\n\n"
