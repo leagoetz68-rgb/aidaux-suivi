@@ -9,11 +9,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
-
 <div id="loading-overlay">Chargement…</div>
-
 <div class="app-layout">
-
   <!-- ── SIDEBAR ── -->
   <aside class="sidebar">
     <div class="sidebar-brand">
@@ -42,12 +39,14 @@
         <span class="nav-ico">💶</span> Analyses financières
       </a>
       <a href="/reponses"      class="nav-item {{ 'active' if page=='reponses' }}">
-      <span class="nav-ico">✉️</span> Relances anomalies de badgeage
+        <span class="nav-ico">✉️</span> Relances anomalies de badgeage
+      </a>
+      <a href="/alertes"       class="nav-item {{ 'active' if page=='alertes' }}">
+        <span class="nav-ico">🚨</span> Alertes critiques
       </a>
     </nav>
     <div class="sidebar-footer">Aid'aux suivi · v2</div>
   </aside>
-
   <!-- ── CONTENU ── -->
   <main class="content">
     <header class="page-header">
@@ -56,9 +55,7 @@
     </header>
     {% block content %}{% endblock %}
   </main>
-
 </div>
-
 <script>
 function showLoading(on){ document.getElementById("loading-overlay").classList.toggle("active", on); }
 </script>
