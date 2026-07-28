@@ -184,6 +184,16 @@ def init_db():
         )
     """)
 
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS relances_mensuelles (
+            intervenant TEXT,
+            mois TEXT,
+            reponse_recue BOOLEAN DEFAULT FALSE,
+            commentaire TEXT DEFAULT '',
+            PRIMARY KEY (intervenant, mois)
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -995,3 +1005,61 @@ def impact_financier_par_intervenant(mois=None):
         r["total_heures"] = round(r["total_minutes"] / 60, 1)
     result.sort(key=lambda x: x["cout_estime"], reverse=True)
     return result
+
+
+# ─────────────────────────────────────────────────────────
+# Historique des relances (page Alertes critiques)
+# ─────────────────────────────────────────────────────────
+
+def get_historique_relances(intervenant):
+    """
+    Historique mois par mois des relances de badgeage envoyées à un
+    intervenant (déduit de rappels_envoyes + interventions), avec
+    indication manuelle si une réponse a été reçue (case à cocher +
+    commentaire, remplis à la main après un échange par mail/SMS).
+    """
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT i.mois, COUNT(*) as nb_relances, MAX(r.envoye_at) as derniere_relance
+        FROM rappels_envoyes r
+        JOIN interventions i ON i.id = r.intervention_id
+        WHERE i.intervenant = ? AND i.mois IS NOT NULL
+        GROUP BY i.mois
+        ORDER BY i.mois DESC
+    """, (intervenant,)).fetchall()
+    suivi_rows = conn.execute(
+        "SELECT mois, reponse_recue, commentaire FROM relances_mensuelles WHERE intervenant = ?",
+        (intervenant,),
+    ).fetchall()
+    conn.close()
+
+    suivi_map = {
+        s["mois"]: {"reponse_recue": bool(s["reponse_recue"]), "commentaire": s["commentaire"] or ""}
+        for s in suivi_rows
+    }
+
+    out = []
+    for r in rows:
+        info = suivi_map.get(r["mois"], {"reponse_recue": False, "commentaire": ""})
+        out.append({
+            "mois": r["mois"],
+            "nb_relances": r["nb_relances"],
+            "derniere_relance": r["derniere_relance"],
+            "reponse_recue": info["reponse_recue"],
+            "commentaire": info["commentaire"],
+        })
+    return out
+
+
+def set_relance_reponse(intervenant, mois, reponse_recue, commentaire):
+    """Enregistre manuellement, pour un intervenant et un mois donnés, si une réponse a été reçue suite à la relance (et un commentaire libre)."""
+    conn = get_conn()
+    conn.execute("""
+        INSERT INTO relances_mensuelles (intervenant, mois, reponse_recue, commentaire)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT (intervenant, mois) DO UPDATE SET
+            reponse_recue = excluded.reponse_recue,
+            commentaire = excluded.commentaire
+    """, (intervenant, mois, reponse_recue, commentaire))
+    conn.commit()
+    conn.close()
