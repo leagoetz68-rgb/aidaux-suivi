@@ -397,6 +397,29 @@ def api_recidivistes():
     data = db.get_recidivistes()
     return jsonify({"recidivistes": data})
 
+@app.route("/api/historique_relances")
+def api_historique_relances():
+    nom = request.args.get("intervenant")
+    if not nom:
+        return jsonify({"error": "Intervenant manquant"}), 400
+    historique = db.get_historique_relances(nom)
+    for h in historique:
+        h["derniere_relance"] = fmt_date_fr(h["derniere_relance"]) if h["derniere_relance"] else ""
+    return jsonify({"historique": historique})
+
+
+@app.route("/api/relance_reponse", methods=["POST"])
+def api_relance_reponse():
+    data = request.json
+    intervenant = data.get("intervenant")
+    mois = data.get("mois")
+    reponse_recue = bool(data.get("reponse_recue"))
+    commentaire = (data.get("commentaire") or "").strip()
+    if not intervenant or not mois:
+        return jsonify({"error": "intervenant et mois requis"}), 400
+    db.set_relance_reponse(intervenant, mois, reponse_recue, commentaire)
+    return jsonify({"ok": True})
+
 @app.route("/api/detail_intervenant")
 def api_detail_intervenant():
     nom = request.args.get("intervenant")
