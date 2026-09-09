@@ -45,7 +45,13 @@
         <span class="nav-ico">🚨</span> Alertes critiques
       </a>
     </nav>
-    <div class="sidebar-footer">Aid'aux suivi · v2</div>
+    <div class="sidebar-footer">
+      {% if session.get('user_email') %}
+      <div style="font-size:12px; opacity:.8; margin-bottom:6px; word-break:break-all;">{{ session.get('user_email') }}</div>
+      {% endif %}
+      <a href="/logout" style="display:inline-block; margin-bottom:8px; color:inherit; font-size:12px; text-decoration:underline;">Se déconnecter</a>
+      <div>Aid'aux suivi · v2</div>
+    </div>
   </aside>
   <!-- ── CONTENU ── -->
   <main class="content">

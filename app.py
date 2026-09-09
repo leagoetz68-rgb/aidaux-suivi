@@ -9,39 +9,34 @@ from flask import Flask, jsonify, render_template, request, send_file, session, 
 import database as db
 from parser import parse_csv_to_rows
 import notifications
+import auth
 
 app = Flask(__name__)
-app.secret_key = "aidaux-suivi-secret-2026"
+app.secret_key = os.environ.get("SECRET_KEY", "aidaux-suivi-secret-2026")
 db.init_db()
-# Identifiants de connexion
-APP_USERNAME = "aidaux"
-APP_PASSWORD = "AidAux2931&&"
+auth.init_auth_db()
+app.register_blueprint(auth.bp)
+
+# Pages accessibles sans être connecté (connexion, réinitialisation de mot de
+# passe, questionnaire public par jeton, endpoint cron).
+PAGES_PUBLIQUES = {
+    "auth.login", "auth.logout", "auth.oubli", "auth.definir",
+    "static", "page_questionnaire", "api_cron_rappel_hebdo",
+}
 
 @app.before_request
 def check_login():
-    if request.endpoint in ("login", "static", "page_questionnaire", "api_cron_rappel_hebdo"):
+    if request.endpoint is None or request.endpoint in PAGES_PUBLIQUES:
         return
-    if not session.get("logged_in"):
-        return redirect(url_for("login"))
+    if not session.get("user_email"):
+        return redirect(url_for("auth.login", next=request.path))
     try:
         notifications.verifier_et_envoyer_rappel_hebdomadaire()
     except Exception:
         pass  # un échec d'envoi ne doit jamais bloquer la navigation
 
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    error = None
-    if request.method == "POST":
-        if request.form["username"] == APP_USERNAME and request.form["password"] == APP_PASSWORD:
-            session["logged_in"] = True
-            return redirect(url_for("page_accueil"))
-        error = "Identifiants incorrects"
-    return render_template("login.html", error=error)
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
+# La connexion, la déconnexion et la réinitialisation du mot de passe sont
+# gérées par le blueprint `auth` (voir auth.py).
 
 # Libellés et couleurs des types de problèmes (partagés)
 PROBLEM_TYPES = ["Manquée", "Badgeage partiel", "Trop courte", "Trop longue"]
