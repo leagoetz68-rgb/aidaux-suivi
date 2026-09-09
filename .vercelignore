@@ -1,0 +1,12 @@
+# Fichiers inutiles en production (réduit la taille du déploiement)
+aidaux.db
+__pycache__/
+*.pyc
+*.bat
+*.vbs
+desktop.py
+serveur.py
+make_icon.py
+creer_raccourci_collegues.py
+GUIDE_INSTALLATION_BUREAU.txt
+static/icon_preview.png
