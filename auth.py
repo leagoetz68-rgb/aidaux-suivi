@@ -35,7 +35,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 # variable d'environnement AUTH_ALLOWED_EMAILS (adresses séparées par des virgules).
 _EMAILS_PAR_DEFAUT = [
     "magali.metz@aidaux.fr",
-    "magali.wolff@aidaux.fr",
+    "magalie.fux@aidaux.fr",
     "lea.goetz@aidaux.fr",
     "marie.mischel@aidaux.fr",
     "tatiana.suplon@aidaux.fr",
