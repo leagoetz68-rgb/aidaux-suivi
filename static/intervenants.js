@@ -24,6 +24,7 @@ async function init(){
 }
 
 let emails = {};
+let exclusions = new Set();
 
 async function load(){
   showLoading(true);
@@ -34,6 +35,7 @@ async function load(){
     allData = d.intervenants;
     moyenne = d.moyenne_taux;
     emails = await (await fetch("/api/intervenant_emails")).json();
+    exclusions = new Set(await (await fetch("/api/intervenant_exclusion")).json());
     render();
   } finally { showLoading(false); }
 }
@@ -49,6 +51,15 @@ async function saveEmail(nom, input){
   emails[nom] = email;
 }
 
+async function toggleExclusion(nom, exclu){
+  await fetch("/api/intervenant_exclusion", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ intervenant: nom, exclu }),
+  });
+  if (exclu) exclusions.add(nom); else exclusions.delete(nom);
+}
+
 function render(){
   const term = document.getElementById("f-search").value.toLowerCase();
   const data = allData.filter(d => d.intervenant.toLowerCase().includes(term));
@@ -56,11 +67,12 @@ function render(){
     `${data.length} intervenant${data.length>1?"s":""} · moyenne ${moyenne}%`;
 
   const tbody = document.getElementById("table-body");
-  if (!data.length){ tbody.innerHTML = `<tr><td colspan="10" class="empty-state">Aucun résultat.</td></tr>`; return; }
+  if (!data.length){ tbody.innerHTML = `<tr><td colspan="11" class="empty-state">Aucun résultat.</td></tr>`; return; }
 
   tbody.innerHTML = data.map(d => {
     const cls = d.taux > moyenne ? "taux-high" : "taux-ok";
     const nomEch = d.intervenant.replace(/'/g,"\\'");
+    const estExclu = exclusions.has(d.intervenant);
     return `<tr>
       <td><strong>${d.intervenant}</strong></td>
       <td>${d.total}</td>
@@ -69,6 +81,10 @@ function render(){
       <td>${d.manquees}</td><td>${d.partiels}</td><td>${d.courtes}</td><td>${d.longues}</td>
       <td><input type="email" placeholder="email…" value="${emails[d.intervenant] || ""}"
             onblur="saveEmail('${nomEch}', this)" style="width:160px" /></td>
+      <td style="text-align:center">
+        <input type="checkbox" title="Exclure complètement cet intervenant des relances, même s'il ne badge pas"
+               ${estExclu ? "checked" : ""} onchange="toggleExclusion('${nomEch}', this.checked)" />
+      </td>
       <td><button class="btn-link" onclick="openDetail('${nomEch}')">Voir →</button></td>
     </tr>`;
   }).join("");
