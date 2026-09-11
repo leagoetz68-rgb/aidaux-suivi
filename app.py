@@ -138,6 +138,22 @@ def api_intervenant_emails():
         return jsonify({"ok": True})
     return jsonify(db.get_intervenant_emails())
 
+@app.route("/api/intervenant_exclusion", methods=["GET", "POST"])
+def api_intervenant_exclusion():
+    """
+    Exclusion complète d'un intervenant des relances email (indépendamment
+    de ses interventions individuelles) : même s'il ne badge jamais, aucune
+    relance ne lui est envoyée tant qu'il est dans cette liste.
+    """
+    if request.method == "POST":
+        intervenant = request.json.get("intervenant")
+        exclu = bool(request.json.get("exclu"))
+        if not intervenant:
+            return jsonify({"error": "intervenant requis"}), 400
+        db.set_intervenant_exclusion(intervenant, exclu)
+        return jsonify({"ok": True})
+    return jsonify(sorted(db.get_intervenants_exclus()))
+
 @app.route("/api/send_reminders", methods=["POST"])
 def api_send_reminders():
     from datetime import datetime, timedelta
