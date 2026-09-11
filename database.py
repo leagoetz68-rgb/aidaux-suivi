@@ -147,6 +147,10 @@ def init_db():
             email       TEXT NOT NULL
         )
     """)
+    # L'email reste facultatif désormais : un intervenant peut être exclu des
+    # relances sans jamais avoir eu d'adresse email renseignée.
+    c.execute("ALTER TABLE intervenant_emails ALTER COLUMN email DROP NOT NULL")
+    c.execute("ALTER TABLE intervenant_emails ADD COLUMN IF NOT EXISTS exclu_relance BOOLEAN DEFAULT FALSE")
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS rappels_envoyes (
@@ -282,6 +286,32 @@ def get_intervenant_emails():
     return {r["intervenant"]: r["email"] for r in rows}
 
 
+def get_intervenants_exclus():
+    """
+    Renvoie l'ensemble des intervenants exclus en bloc des relances email,
+    quel que soit le nombre ou le type de leurs interventions à problème
+    (utile pour ceux qui ne badgent jamais mais ne doivent pas être relancés :
+    intervenants sortis, en litige suivi autrement, etc.).
+    """
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT intervenant FROM intervenant_emails WHERE COALESCE(exclu_relance, FALSE)"
+    ).fetchall()
+    conn.close()
+    return {r["intervenant"] for r in rows}
+
+
+def set_intervenant_exclusion(intervenant, exclu):
+    """Exclut (ou réintègre) un intervenant de toutes les relances email."""
+    conn = get_conn()
+    conn.execute("""
+        INSERT INTO intervenant_emails (intervenant, exclu_relance) VALUES (?, ?)
+        ON CONFLICT(intervenant) DO UPDATE SET exclu_relance = excluded.exclu_relance
+    """, (intervenant, exclu))
+    conn.commit()
+    conn.close()
+
+
 def set_intervenant_email(intervenant, email):
     conn = get_conn()
     conn.execute("""
@@ -296,7 +326,8 @@ def get_unnotified_manquees(date_debut=None, date_fin=None):
     """
     Interventions 'Manquée' pour lesquelles aucun rappel n'a encore été envoyé,
     en excluant celles marquées comme "exclues des relances" (commentaire
-    interne justificatif).
+    interne justificatif) ainsi que celles de tout intervenant globalement
+    exclu des relances (voir intervenant_emails.exclu_relance).
     date_debut / date_fin (format 'YYYY-MM-DD') permettent de limiter la
     relance à une période précise (aujourd'hui, cette semaine...) plutôt que
     de reprendre tout l'historique jamais notifié.
@@ -306,8 +337,10 @@ def get_unnotified_manquees(date_debut=None, date_fin=None):
         SELECT i.id, i.intervenant, i.client, i.date_prevue
         FROM interventions i
         LEFT JOIN rappels_envoyes r ON r.intervention_id = i.id
+        LEFT JOIN intervenant_emails ie ON ie.intervenant = i.intervenant
         WHERE i.type_probleme = 'Manquée' AND r.intervention_id IS NULL
           AND NOT COALESCE(i.exclu_relance, FALSE)
+          AND NOT COALESCE(ie.exclu_relance, FALSE)
     """
     params = []
     if date_debut:
