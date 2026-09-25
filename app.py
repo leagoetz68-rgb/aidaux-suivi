@@ -1,5 +1,6 @@
 # app.py — Application de suivi Aid'aux (Flask + SQLite)
 import ximi
+import ximi_sync
 import io
 import os
 import tempfile
@@ -15,13 +16,17 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "aidaux-suivi-secret-2026")
 db.init_db()
 auth.init_auth_db()
+try:
+    ximi_sync.init_tables()
+except Exception as e:
+    print("Tables Ximi non initialisées :", e)
 app.register_blueprint(auth.bp)
 
 # Pages accessibles sans être connecté (connexion, réinitialisation de mot de
 # passe, questionnaire public par jeton, endpoint cron).
 PAGES_PUBLIQUES = {
     "auth.login", "auth.logout", "auth.oubli", "auth.definir",
-    "static", "page_questionnaire", "api_cron_rappel_hebdo",
+    "static", "page_questionnaire", "api_cron_rappel_hebdo", "api_cron_ximi_sync",
 }
 
 @app.before_request
@@ -530,121 +535,34 @@ def page_financier():
     return render_template("financier.html", page="financier")
 
 # ─────────────────────────────────────────────────────────
-# Calibrage Ximi (temporaire) : compare les données de l'API avec les
-# interventions déjà importées par CSV, pour comprendre les codes Ximi
-# et les seuils « Trop courte / Trop longue ».
-# N'affiche AUCUNE donnée personnelle : uniquement des comptages et des minutes.
+# Synchronisation automatique avec l'API Ximi
 # ─────────────────────────────────────────────────────────
 
-def _cle_nom(nom):
-    """Clé de rapprochement d'un nom : sans accents ni ponctuation, mots triés."""
-    import re, unicodedata
-    s = unicodedata.normalize("NFKD", str(nom or "")).encode("ascii", "ignore").decode().lower()
-    return " ".join(sorted(re.findall(r"[a-z0-9]+", s)))
+def _lancer_synchro_ximi(jours=7):
+    cache = ximi_sync.rafraichir_cache(budget_secondes=20)
+    resultat = ximi_sync.synchroniser(jours=jours)
+    resultat["cache"] = cache
+    return resultat
 
 
-def _minutes(hms):
-    """'01:30:00' ou '08:29:48' -> minutes (float)."""
+@app.route("/api/ximi/sync", methods=["POST"])
+def api_ximi_sync():
+    """Bouton « Synchroniser avec Ximi » de la page Import."""
     try:
-        p = [int(x) for x in str(hms).split(":")]
-        return p[0] * 60 + p[1] + (p[2] if len(p) > 2 else 0) / 60
-    except Exception:
-        return None
+        jours = int(request.args.get("jours", 7))
+        return jsonify(_lancer_synchro_ximi(jours=min(max(jours, 1), 30)))
+    except Exception as e:
+        return jsonify({"pret": False, "erreur": str(e)[:300]}), 500
 
 
-@app.route("/admin/ximi-calibrage")
-def ximi_calibrage():
-    import time as _t
-    from collections import Counter, defaultdict
-    from datetime import datetime, timedelta
-    from statistics import median
-
-    t0 = _t.time()
-    rapport = {}
-
-    # 1) Fenêtre : les 7 derniers jours présents dans la base (import CSV)
-    conn = db.get_conn()
-    derniere = conn.execute("SELECT MAX(date_prevue) AS d FROM interventions").fetchone()["d"]
-    fin = datetime.strptime(derniere[:10], "%Y-%m-%d") + timedelta(days=1)
-    debut = fin - timedelta(days=7)
-    rapport["fenetre"] = [debut.strftime("%Y-%m-%d"), fin.strftime("%Y-%m-%d")]
-    lignes = conn.execute(
-        "SELECT client, date_prevue, duree, debut_reel, fin_reelle, timing "
-        "FROM interventions WHERE date_prevue >= ? AND date_prevue < ?",
-        (debut.strftime("%Y-%m-%d"), fin.strftime("%Y-%m-%d"))).fetchall()
-    csv = {(_cle_nom(r["client"]), r["date_prevue"][:16]): r for r in lignes}
-    rapport["nb_interventions_csv"] = len(csv)
-
-    # 2) Interventions Ximi de la fenêtre (on parcourt les pages, max 25 s)
-    api = {}
-    pages = 0
-    offset = 0
-    while _t.time() - t0 < 25:
-        res = ximi.get("api/interventions/all", {"Top": 1000, "Offset": offset})
-        items = res.get("Results", [])
-        pages += 1
-        for it in items:
-            st = (it.get("Start") or "").replace("T", " ")[:16]
-            if debut.strftime("%Y-%m-%d") <= st < fin.strftime("%Y-%m-%d"):
-                api[it["Id"]] = it
-        if not res.get("HasMoreRows") or not items:
-            break
-        offset += len(items)
-    rapport["api_pages_lues"] = pages
-    rapport["api_toutes_pages_lues"] = not res.get("HasMoreRows")
-    rapport["nb_interventions_api_fenetre"] = len(api)
-
-    # 3) Badgeages depuis le début de la fenêtre
-    badges = defaultdict(list)
-    offset = 0
-    while _t.time() - t0 < 45:
-        res = ximi.get("api/checkInOut", {
-            "lastModification": (debut - timedelta(days=1)).strftime("%Y-%m-%d"),
-            "Top": 1000, "Offset": offset})
-        items = res.get("Results", [])
-        for b in items:
-            badges[b.get("InterventionId")].append(b)
-        if not res.get("HasMoreRows") or not items:
-            break
-        offset += len(items)
-
-    # 4) Rapprochement API <-> CSV
-    stats = defaultdict(Counter)
-    ecarts = defaultdict(list)
-    concord_event = Counter()
-    nb_match = 0
-    for iid, it in api.items():
-        cle = (_cle_nom((it.get("Client") or {}).get("DisplayName")),
-               it["Start"].replace("T", " ")[:16])
-        r = csv.get(cle)
-        if not r:
-            continue
-        nb_match += 1
-        label = r["timing"] or "(vide)"
-        bs = badges.get(iid, [])
-        events = "".join(sorted(str(b.get("Event")) for b in bs)) or "aucun"
-        stats[label]["events=" + events] += 1
-        stats[label]["status=" + str(it.get("Status"))] += 1
-
-        # Quel code Event correspond à l'heure d'arrivée du CSV ?
-        for b in bs:
-            h = (b.get("Time") or "")[11:16]
-            if r["debut_reel"] and h == r["debut_reel"][:5]:
-                concord_event["arrivee_csv=Event" + str(b.get("Event"))] += 1
-            if r["fin_reelle"] and h == r["fin_reelle"][:5]:
-                concord_event["depart_csv=Event" + str(b.get("Event"))] += 1
-
-        # Écart de durée réelle - prévue (en minutes) par libellé CSV
-        prevue = _minutes(r["duree"])
-        a, d = _minutes(r["debut_reel"]), _minutes(r["fin_reelle"])
-        if prevue is not None and a is not None and d is not None:
-            ecarts[label].append(round((d - a) - prevue, 1))
-
-    rapport["nb_rapproches"] = nb_match
-    rapport["par_libelle_csv"] = {k: dict(v) for k, v in stats.items()}
-    rapport["correspondance_heures_event"] = dict(concord_event)
-    rapport["ecart_duree_minutes"] = {
-        k: {"nb": len(v), "min": min(v), "mediane": median(v), "max": max(v)}
-        for k, v in ecarts.items() if v}
-    rapport["secondes"] = round(_t.time() - t0, 1)
-    return jsonify(rapport)
+@app.route("/api/cron/ximi-sync", methods=["POST"])
+def api_cron_ximi_sync():
+    """Même synchronisation, déclenchable automatiquement (tâche planifiée)."""
+    if not CRON_SECRET:
+        return jsonify({"error": "CRON_SECRET non configurée côté serveur"}), 500
+    if request.headers.get("X-Cron-Secret", "") != CRON_SECRET:
+        return jsonify({"error": "Non autorisé"}), 403
+    try:
+        return jsonify(_lancer_synchro_ximi())
+    except Exception as e:
+        return jsonify({"pret": False, "erreur": str(e)[:300]}), 500
