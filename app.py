@@ -530,22 +530,71 @@ def page_financier():
     return render_template("financier.html", page="financier")
 
 # ─────────────────────────────────────────────────────────
-# Test de connexion à l'API Ximi (protégé par la connexion)
+# Exploration de la structure des données Ximi (temporaire)
+# N'affiche AUCUNE donnée personnelle : uniquement des comptages,
+# des dates min/max et des noms de champs.
 # ─────────────────────────────────────────────────────────
 
-@app.route("/admin/ximi-test")
-def ximi_test():
-    resultats = {}
-    tests = {
-        "connexion": ("api/contactSources", {"Top": 3}),
-        "intervenants": ("api/agents", {"Top": 3}),
-        "badgeages": ("api/checkInOut", {"Top": 3, "lastModification": "2026-09-01"}),
-        "interventions": ("api/interventions/all", {"Top": 3}),
-    }
-    for nom, (chemin, params) in tests.items():
-        try:
-            resultats[nom] = {"ok": True, "exemple": ximi.get(chemin, params)}
-        except Exception as e:
-            resultats[nom] = {"ok": False, "erreur": str(e)}
-    return jsonify(resultats)
+@app.route("/admin/ximi-structure")
+def ximi_structure():
+    from collections import Counter
+    from datetime import datetime, timedelta
 
+    fin = datetime.now()
+    debut = fin - timedelta(days=7)
+    rapport = {}
+
+    def resume_interventions(res):
+        items = res.get("Results", [])
+        starts = sorted(i.get("Start") for i in items if i.get("Start"))
+        return {
+            "nb_resultats": len(items),
+            "HasMoreRows": res.get("HasMoreRows"),
+            "Start_min": starts[0] if starts else None,
+            "Start_max": starts[-1] if starts else None,
+            "valeurs_Status": dict(Counter(str(i.get("Status")) for i in items)),
+            "champs": sorted(items[0].keys()) if items else [],
+        }
+
+    # 1) Interventions : quel nom de paramètre filtre les dates ?
+    essais = {
+        "sans_filtre": {},
+        "startDate_endDate": {"startDate": debut.strftime("%Y-%m-%d"), "endDate": fin.strftime("%Y-%m-%d")},
+        "StartDate_EndDate": {"StartDate": debut.strftime("%Y-%m-%d"), "EndDate": fin.strftime("%Y-%m-%d")},
+        "start_end": {"start": debut.strftime("%Y-%m-%d"), "end": fin.strftime("%Y-%m-%d")},
+    }
+    ids_interventions = set()
+    for nom, params in essais.items():
+        try:
+            params = dict(params, Top=1000, ComputeHasMoreRows="true")
+            res = ximi.get("api/interventions/all", params)
+            rapport["interventions_" + nom] = resume_interventions(res)
+            if nom != "sans_filtre":
+                ids_interventions |= {i.get("Id") for i in res.get("Results", [])}
+        except Exception as e:
+            rapport["interventions_" + nom] = {"erreur": str(e)[:300]}
+
+    # 2) Badgeages des 7 derniers jours
+    try:
+        res = ximi.get("api/checkInOut", {
+            "lastModification": debut.strftime("%Y-%m-%d"),
+            "Top": 1000, "ComputeHasMoreRows": "true",
+        })
+        items = res.get("Results", [])
+        heures = sorted(i.get("Time") for i in items if i.get("Time"))
+        lies = sum(1 for i in items if i.get("InterventionId") in ids_interventions)
+        rapport["badgeages"] = {
+            "nb_resultats": len(items),
+            "HasMoreRows": res.get("HasMoreRows"),
+            "Time_min": heures[0] if heures else None,
+            "Time_max": heures[-1] if heures else None,
+            "valeurs_Event": dict(Counter(str(i.get("Event")) for i in items)),
+            "nb_badgeages_par_intervention": dict(Counter(
+                Counter(i.get("InterventionId") for i in items).values())),
+            "nb_relies_aux_interventions_trouvees": lies,
+            "champs": sorted(items[0].keys()) if items else [],
+        }
+    except Exception as e:
+        rapport["badgeages"] = {"erreur": str(e)[:300]}
+
+    return jsonify(rapport)
