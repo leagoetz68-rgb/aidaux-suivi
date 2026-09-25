@@ -537,64 +537,63 @@ def page_financier():
 
 @app.route("/admin/ximi-structure")
 def ximi_structure():
+    """Exploration n°2 : volumes, tri et filtres possibles. Aucune donnée personnelle."""
+    import time as _t
     from collections import Counter
-    from datetime import datetime, timedelta
-
-    fin = datetime.now()
-    debut = fin - timedelta(days=7)
     rapport = {}
 
-    def resume_interventions(res):
+    def resume(res, duree):
         items = res.get("Results", [])
         starts = sorted(i.get("Start") for i in items if i.get("Start"))
         return {
-            "nb_resultats": len(items),
+            "nb": len(items),
+            "Hitcount": res.get("Hitcount") or res.get("HitCount"),
             "HasMoreRows": res.get("HasMoreRows"),
             "Start_min": starts[0] if starts else None,
             "Start_max": starts[-1] if starts else None,
-            "valeurs_Status": dict(Counter(str(i.get("Status")) for i in items)),
-            "champs": sorted(items[0].keys()) if items else [],
+            "premier_Start": items[0].get("Start") if items else None,
+            "dernier_Start": items[-1].get("Start") if items else None,
+            "secondes": round(duree, 1),
         }
 
-    # 1) Interventions : quel nom de paramètre filtre les dates ?
-    essais = {
-        "sans_filtre": {},
-        "startDate_endDate": {"startDate": debut.strftime("%Y-%m-%d"), "endDate": fin.strftime("%Y-%m-%d")},
-        "StartDate_EndDate": {"StartDate": debut.strftime("%Y-%m-%d"), "EndDate": fin.strftime("%Y-%m-%d")},
-        "start_end": {"start": debut.strftime("%Y-%m-%d"), "end": fin.strftime("%Y-%m-%d")},
-    }
-    ids_interventions = set()
-    for nom, params in essais.items():
+    def essai(nom, chemin, params):
+        t0 = _t.time()
         try:
-            params = dict(params, Top=1000, ComputeHasMoreRows="true")
-            res = ximi.get("api/interventions/all", params)
-            rapport["interventions_" + nom] = resume_interventions(res)
-            if nom != "sans_filtre":
-                ids_interventions |= {i.get("Id") for i in res.get("Results", [])}
+            res = ximi.get(chemin, params)
+            rapport[nom] = resume(res, _t.time() - t0)
+            return res
         except Exception as e:
-            rapport["interventions_" + nom] = {"erreur": str(e)[:300]}
+            rapport[nom] = {"erreur": str(e)[:250], "secondes": round(_t.time() - t0, 1)}
+            return None
 
-    # 2) Badgeages des 7 derniers jours
+    # 1) Nombre total d'interventions dans Ximi
+    total = essai("A_total_interventions", "api/interventions/all",
+                  {"Top": 1000, "ComputeHasMoreRows": "true", "ComputeHitCount": "true"})
+
+    # 2) Paramètres de filtre / tri possibles
+    base = {"Top": 50}
+    essai("B_Filter", "api/interventions/all", dict(base, Filter="Start ge 2026-09-18"))
+    essai("C_filter_odata", "api/interventions/all", {**base, "$filter": "Start ge 2026-09-18"})
+    essai("D_Sorting_desc", "api/interventions/all", dict(base, Sorting="Start desc"))
+    essai("E_Search_date", "api/interventions/all", dict(base, Search="2026-09-18"))
+
+    # 3) Ordre des pages : 2e page et dernière page
+    essai("F_page_2", "api/interventions/all", {"Top": 1000, "Offset": 1000})
+    hc = (total or {}).get("Hitcount") or (total or {}).get("HitCount")
+    if hc:
+        essai("G_derniere_page", "api/interventions/all",
+              {"Top": 1000, "Offset": max(0, int(hc) - 1000)})
+
+    # 4) Volume de badgeages sur 7 jours
+    from datetime import datetime, timedelta
+    d = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    t0 = _t.time()
     try:
-        res = ximi.get("api/checkInOut", {
-            "lastModification": debut.strftime("%Y-%m-%d"),
-            "Top": 1000, "ComputeHasMoreRows": "true",
-        })
-        items = res.get("Results", [])
-        heures = sorted(i.get("Time") for i in items if i.get("Time"))
-        lies = sum(1 for i in items if i.get("InterventionId") in ids_interventions)
-        rapport["badgeages"] = {
-            "nb_resultats": len(items),
-            "HasMoreRows": res.get("HasMoreRows"),
-            "Time_min": heures[0] if heures else None,
-            "Time_max": heures[-1] if heures else None,
-            "valeurs_Event": dict(Counter(str(i.get("Event")) for i in items)),
-            "nb_badgeages_par_intervention": dict(Counter(
-                Counter(i.get("InterventionId") for i in items).values())),
-            "nb_relies_aux_interventions_trouvees": lies,
-            "champs": sorted(items[0].keys()) if items else [],
-        }
+        res = ximi.get("api/checkInOut", {"lastModification": d, "Top": 1,
+                       "ComputeHasMoreRows": "true", "ComputeHitCount": "true"})
+        rapport["H_badgeages_7j"] = {"Hitcount": res.get("Hitcount") or res.get("HitCount"),
+                                     "secondes": round(_t.time() - t0, 1)}
     except Exception as e:
-        rapport["badgeages"] = {"erreur": str(e)[:300]}
+        rapport["H_badgeages_7j"] = {"erreur": str(e)[:250]}
 
     return jsonify(rapport)
