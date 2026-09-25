@@ -539,7 +539,7 @@ def ximi_test():
     tests = {
         "connexion": ("api/contactSources", {"Top": 3}),
         "intervenants": ("api/agents", {"Top": 3}),
-        "badgeages": ("api/checkInOut", {"Top": 3}),
+        "badgeages": ("api/checkInOut", {"Top": 3, "lastModification": "2026-09-01"}),
         "interventions": ("api/interventions/all", {"Top": 3}),
     }
     for nom, (chemin, params) in tests.items():
@@ -549,59 +549,3 @@ def ximi_test():
             resultats[nom] = {"ok": False, "erreur": str(e)}
     return jsonify(resultats)
 
-
-# ─────────────────────────────────────────────────────────
-# Diagnostic de l'authentification Ximi (à supprimer une fois résolu)
-# Essaie plusieurs variantes de jeton pour trouver celle que Ximi accepte.
-# ─────────────────────────────────────────────────────────
-
-@app.route("/admin/ximi-diagnostic")
-def ximi_diagnostic():
-    import time
-    import jwt
-    import requests as rq
-
-    cle_id = os.environ.get("XIMI_API_KEY_ID", "")
-    cle_privee = os.environ.get("XIMI_PRIVATE_KEY", "").replace("\\n", "\n").strip()
-    url = "https://api.ximi.xelya.io/Ximi2/api/contactSources"
-
-    infos = {
-        "identifiant_utilise": cle_id,
-        "longueur_identifiant": len(cle_id),
-        "cle_privee_debut": cle_privee[:31],
-        "cle_privee_fin": cle_privee[-29:],
-    }
-
-    maintenant = int(time.time())
-    sub = cle_id.strip()
-    # (nom, contenu du jeton, algorithme, nom du header)
-    variantes = [
-        ("standard", {"sub": sub, "exp": maintenant + 300}, "RS512", "Api-Key"),
-        ("exp_en_texte", {"sub": sub, "exp": str(maintenant + 300)}, "RS512", "Api-Key"),
-        ("avec_iat", {"sub": sub, "exp": maintenant + 300, "iat": maintenant}, "RS512", "Api-Key"),
-        ("exp_1_heure", {"sub": sub, "exp": maintenant + 3600}, "RS512", "Api-Key"),
-        ("algo_RS256", {"sub": sub, "exp": maintenant + 300}, "RS256", "Api-Key"),
-        ("header_majuscules", {"sub": sub, "exp": maintenant + 300}, "RS512", "API-KEY"),
-    ]
-    resultats = {}
-    for nom, payload, algo, nom_header in variantes:
-        try:
-            jeton = jwt.encode(payload, cle_privee, algorithm=algo)
-            r = rq.get(url, headers={"Content-Type": "application/json", nom_header: jeton},
-                       params={"Top": 1}, timeout=20)
-            resultats[nom] = {"statut": r.status_code, "reponse": r.text[:200]}
-        except Exception as e:
-            resultats[nom] = {"erreur": str(e)}
-
-    # Badgeages : test avec le paramètre lastModification
-    try:
-        jeton = jwt.encode({"sub": cle_id.strip(), "exp": int(time.time()) + 300},
-                           cle_privee, algorithm="RS512")
-        r = rq.get("https://api.ximi.xelya.io/Ximi2/api/checkInOut",
-                   headers={"Content-Type": "application/json", "Api-Key": jeton},
-                   params={"Top": 1, "lastModification": "2026-09-01"}, timeout=20)
-        resultats["badgeages_avec_date"] = {"statut": r.status_code, "reponse": r.text[:200]}
-    except Exception as e:
-        resultats["badgeages_avec_date"] = {"erreur": str(e)}
-
-    return jsonify({"infos": infos, "resultats": resultats})
