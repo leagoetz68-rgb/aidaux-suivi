@@ -572,19 +572,22 @@ def ximi_diagnostic():
         "cle_privee_fin": cle_privee[-29:],
     }
 
-    variantes = {
-        "standard": {},
-        "clearance_0": {"clearance": 0},
-        "clearance_1": {"clearance": 1},
-        "clearance_2": {"clearance": 2},
-    }
+    maintenant = int(time.time())
+    sub = cle_id.strip()
+    # (nom, contenu du jeton, algorithme, nom du header)
+    variantes = [
+        ("standard", {"sub": sub, "exp": maintenant + 300}, "RS512", "Api-Key"),
+        ("exp_en_texte", {"sub": sub, "exp": str(maintenant + 300)}, "RS512", "Api-Key"),
+        ("avec_iat", {"sub": sub, "exp": maintenant + 300, "iat": maintenant}, "RS512", "Api-Key"),
+        ("exp_1_heure", {"sub": sub, "exp": maintenant + 3600}, "RS512", "Api-Key"),
+        ("algo_RS256", {"sub": sub, "exp": maintenant + 300}, "RS256", "Api-Key"),
+        ("header_majuscules", {"sub": sub, "exp": maintenant + 300}, "RS512", "API-KEY"),
+    ]
     resultats = {}
-    for nom, extra in variantes.items():
-        payload = {"sub": cle_id.strip(), "exp": int(time.time()) + 300}
-        payload.update(extra)
+    for nom, payload, algo, nom_header in variantes:
         try:
-            jeton = jwt.encode(payload, cle_privee, algorithm="RS512")
-            r = rq.get(url, headers={"Content-Type": "application/json", "Api-Key": jeton},
+            jeton = jwt.encode(payload, cle_privee, algorithm=algo)
+            r = rq.get(url, headers={"Content-Type": "application/json", nom_header: jeton},
                        params={"Top": 1}, timeout=20)
             resultats[nom] = {"statut": r.status_code, "reponse": r.text[:200]}
         except Exception as e:
