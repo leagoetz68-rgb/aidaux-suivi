@@ -528,8 +528,12 @@ def api_detail_financier_intervenant():
 @app.route("/financier")
 def page_financier():
     return render_template("financier.html", page="financier")
-    @app.route("/admin/ximi-test")
-@login_required
+
+# ─────────────────────────────────────────────────────────
+# Test de connexion à l'API Ximi (protégé par la connexion)
+# ─────────────────────────────────────────────────────────
+
+@app.route("/admin/ximi-test")
 def ximi_test():
     resultats = {}
     tests = {
@@ -543,4 +547,4 @@ def ximi_test():
             resultats[nom] = {"ok": True, "exemple": ximi.get(chemin, params)}
         except Exception as e:
             resultats[nom] = {"ok": False, "erreur": str(e)}
-    return resultats
+    return jsonify(resultats)
