@@ -51,7 +51,9 @@ def get(path, params=None, timeout=30):
     """GET simple. path ex : 'api/agents' ou 'api/agents/123'."""
     url = f"{BASE_URL}/{path.lstrip('/')}"
     r = requests.get(url, headers=_headers(), params=params or {}, timeout=timeout)
-    r.raise_for_status()
+    if r.status_code >= 400:
+        # On garde le message renvoyé par Ximi : il explique souvent la cause
+        raise Exception(f"{r.status_code} {r.reason} - reponse Ximi : {r.text[:500]}")
     return r.json()
 
 
