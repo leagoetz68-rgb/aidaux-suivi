@@ -4,6 +4,14 @@
 
 {% block content %}
 <div class="card">
+  <h3>Synchronisation automatique avec Ximi</h3>
+  <p>Récupère directement depuis Ximi les interventions et badgeages des 7 derniers jours,
+     sans export CSV. Les anomalies sont calculées avec les mêmes règles que Ximi.</p>
+  <button class="btn-primary" id="btn-ximi-sync" type="button">Synchroniser avec Ximi</button>
+  <p id="ximi-sync-statut" style="margin-top:12px"></p>
+</div>
+
+<div class="card">
   <div id="drop-zone">
     <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="none"
          viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -42,4 +50,37 @@
 
 {% block scripts %}
 <script src="/static/import.js?v=16"></script>
+<script>
+(function () {
+  const btn = document.getElementById("btn-ximi-sync");
+  const statut = document.getElementById("ximi-sync-statut");
+
+  async function lancer(tentative) {
+    btn.disabled = true;
+    statut.textContent = tentative === 1
+      ? "Synchronisation en cours… (jusqu'à 1 minute)"
+      : "Lecture du planning Ximi, étape " + tentative + "…";
+    try {
+      const r = await fetch("/api/ximi/sync", { method: "POST" });
+      const d = await r.json();
+      if (d.erreur) {
+        statut.textContent = "Erreur : " + d.erreur;
+      } else if (!d.pret) {
+        if (tentative < 6) return lancer(tentative + 1);  // premier remplissage
+        statut.textContent = d.message || "Réessayez dans un instant.";
+      } else {
+        statut.textContent = "Terminé : " + d.interventions_traitees +
+          " interventions traitées (" + d.ajoutees + " nouvelles, " +
+          d.mises_a_jour + " mises à jour)." +
+          (d.badgeages_complets ? "" : " Attention : tous les badgeages n'ont pas pu être lus, relancez.");
+        if (typeof loadFiles === "function") loadFiles();
+      }
+    } catch (e) {
+      statut.textContent = "Erreur de connexion : " + e;
+    }
+    btn.disabled = false;
+  }
+  btn.addEventListener("click", () => lancer(1));
+})();
+</script>
 {% endblock %}
