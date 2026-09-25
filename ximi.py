@@ -4,7 +4,7 @@ Client minimal pour l'API Ximi V2 (Xelya) - apps Aid'Aux.
 Variables d'environnement (Vercel / Render) :
   XIMI_API_KEY_ID   -> identifiant de clé fourni par Xelya (format a067d785-....)
   XIMI_PRIVATE_KEY  -> contenu complet de la clé privée PEM (BEGIN ... END inclus)
-  XIMI_BASE_URL     -> optionnel, défaut https://api.ximi.xelya.io/Ximi2
+  XIMI_BASE_URL     -> optionnel, défaut https://api.ximi.xelya.io/Ximi3
   XIMI_CLEARANCE    -> optionnel (0, 1 ou 2), seulement si Xelya vous l'indique
 
 requirements.txt : PyJWT, cryptography, requests
@@ -15,7 +15,7 @@ import time
 import jwt  # PyJWT
 import requests
 
-BASE_URL = os.environ.get("XIMI_BASE_URL", "https://api.ximi.xelya.io/Ximi2").rstrip("/")
+BASE_URL = os.environ.get("XIMI_BASE_URL", "https://api.ximi.xelya.io/Ximi3").rstrip("/")
 TOKEN_DURATION = 15 * 60  # secondes
 
 _cache = {"token": None, "exp": 0}
