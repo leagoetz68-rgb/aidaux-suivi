@@ -530,70 +530,121 @@ def page_financier():
     return render_template("financier.html", page="financier")
 
 # ─────────────────────────────────────────────────────────
-# Exploration de la structure des données Ximi (temporaire)
-# N'affiche AUCUNE donnée personnelle : uniquement des comptages,
-# des dates min/max et des noms de champs.
+# Calibrage Ximi (temporaire) : compare les données de l'API avec les
+# interventions déjà importées par CSV, pour comprendre les codes Ximi
+# et les seuils « Trop courte / Trop longue ».
+# N'affiche AUCUNE donnée personnelle : uniquement des comptages et des minutes.
 # ─────────────────────────────────────────────────────────
 
-@app.route("/admin/ximi-structure")
-def ximi_structure():
-    """Exploration n°2 : volumes, tri et filtres possibles. Aucune donnée personnelle."""
+def _cle_nom(nom):
+    """Clé de rapprochement d'un nom : sans accents ni ponctuation, mots triés."""
+    import re, unicodedata
+    s = unicodedata.normalize("NFKD", str(nom or "")).encode("ascii", "ignore").decode().lower()
+    return " ".join(sorted(re.findall(r"[a-z0-9]+", s)))
+
+
+def _minutes(hms):
+    """'01:30:00' ou '08:29:48' -> minutes (float)."""
+    try:
+        p = [int(x) for x in str(hms).split(":")]
+        return p[0] * 60 + p[1] + (p[2] if len(p) > 2 else 0) / 60
+    except Exception:
+        return None
+
+
+@app.route("/admin/ximi-calibrage")
+def ximi_calibrage():
     import time as _t
-    from collections import Counter
+    from collections import Counter, defaultdict
+    from datetime import datetime, timedelta
+    from statistics import median
+
+    t0 = _t.time()
     rapport = {}
 
-    def resume(res, duree):
+    # 1) Fenêtre : les 7 derniers jours présents dans la base (import CSV)
+    conn = db.get_conn()
+    derniere = conn.execute("SELECT MAX(date_prevue) AS d FROM interventions").fetchone()["d"]
+    fin = datetime.strptime(derniere[:10], "%Y-%m-%d") + timedelta(days=1)
+    debut = fin - timedelta(days=7)
+    rapport["fenetre"] = [debut.strftime("%Y-%m-%d"), fin.strftime("%Y-%m-%d")]
+    lignes = conn.execute(
+        "SELECT client, date_prevue, duree, debut_reel, fin_reelle, timing "
+        "FROM interventions WHERE date_prevue >= ? AND date_prevue < ?",
+        (debut.strftime("%Y-%m-%d"), fin.strftime("%Y-%m-%d"))).fetchall()
+    csv = {(_cle_nom(r["client"]), r["date_prevue"][:16]): r for r in lignes}
+    rapport["nb_interventions_csv"] = len(csv)
+
+    # 2) Interventions Ximi de la fenêtre (on parcourt les pages, max 25 s)
+    api = {}
+    pages = 0
+    offset = 0
+    while _t.time() - t0 < 25:
+        res = ximi.get("api/interventions/all", {"Top": 1000, "Offset": offset})
         items = res.get("Results", [])
-        starts = sorted(i.get("Start") for i in items if i.get("Start"))
-        return {
-            "nb": len(items),
-            "Hitcount": res.get("Hitcount") or res.get("HitCount"),
-            "HasMoreRows": res.get("HasMoreRows"),
-            "Start_min": starts[0] if starts else None,
-            "Start_max": starts[-1] if starts else None,
-            "premier_Start": items[0].get("Start") if items else None,
-            "dernier_Start": items[-1].get("Start") if items else None,
-            "secondes": round(duree, 1),
-        }
+        pages += 1
+        for it in items:
+            st = (it.get("Start") or "").replace("T", " ")[:16]
+            if debut.strftime("%Y-%m-%d") <= st < fin.strftime("%Y-%m-%d"):
+                api[it["Id"]] = it
+        if not res.get("HasMoreRows") or not items:
+            break
+        offset += len(items)
+    rapport["api_pages_lues"] = pages
+    rapport["api_toutes_pages_lues"] = not res.get("HasMoreRows")
+    rapport["nb_interventions_api_fenetre"] = len(api)
 
-    def essai(nom, chemin, params):
-        t0 = _t.time()
-        try:
-            res = ximi.get(chemin, params)
-            rapport[nom] = resume(res, _t.time() - t0)
-            return res
-        except Exception as e:
-            rapport[nom] = {"erreur": str(e)[:250], "secondes": round(_t.time() - t0, 1)}
-            return None
+    # 3) Badgeages depuis le début de la fenêtre
+    badges = defaultdict(list)
+    offset = 0
+    while _t.time() - t0 < 45:
+        res = ximi.get("api/checkInOut", {
+            "lastModification": (debut - timedelta(days=1)).strftime("%Y-%m-%d"),
+            "Top": 1000, "Offset": offset})
+        items = res.get("Results", [])
+        for b in items:
+            badges[b.get("InterventionId")].append(b)
+        if not res.get("HasMoreRows") or not items:
+            break
+        offset += len(items)
 
-    # 1) Nombre total d'interventions dans Ximi
-    total = essai("A_total_interventions", "api/interventions/all",
-                  {"Top": 1000, "ComputeHasMoreRows": "true", "ComputeHitCount": "true"})
+    # 4) Rapprochement API <-> CSV
+    stats = defaultdict(Counter)
+    ecarts = defaultdict(list)
+    concord_event = Counter()
+    nb_match = 0
+    for iid, it in api.items():
+        cle = (_cle_nom((it.get("Client") or {}).get("DisplayName")),
+               it["Start"].replace("T", " ")[:16])
+        r = csv.get(cle)
+        if not r:
+            continue
+        nb_match += 1
+        label = r["timing"] or "(vide)"
+        bs = badges.get(iid, [])
+        events = "".join(sorted(str(b.get("Event")) for b in bs)) or "aucun"
+        stats[label]["events=" + events] += 1
+        stats[label]["status=" + str(it.get("Status"))] += 1
 
-    # 2) Paramètres de filtre / tri possibles
-    base = {"Top": 50}
-    essai("B_Filter", "api/interventions/all", dict(base, Filter="Start ge 2026-09-18"))
-    essai("C_filter_odata", "api/interventions/all", {**base, "$filter": "Start ge 2026-09-18"})
-    essai("D_Sorting_desc", "api/interventions/all", dict(base, Sorting="Start desc"))
-    essai("E_Search_date", "api/interventions/all", dict(base, Search="2026-09-18"))
+        # Quel code Event correspond à l'heure d'arrivée du CSV ?
+        for b in bs:
+            h = (b.get("Time") or "")[11:16]
+            if r["debut_reel"] and h == r["debut_reel"][:5]:
+                concord_event["arrivee_csv=Event" + str(b.get("Event"))] += 1
+            if r["fin_reelle"] and h == r["fin_reelle"][:5]:
+                concord_event["depart_csv=Event" + str(b.get("Event"))] += 1
 
-    # 3) Ordre des pages : 2e page et dernière page
-    essai("F_page_2", "api/interventions/all", {"Top": 1000, "Offset": 1000})
-    hc = (total or {}).get("Hitcount") or (total or {}).get("HitCount")
-    if hc:
-        essai("G_derniere_page", "api/interventions/all",
-              {"Top": 1000, "Offset": max(0, int(hc) - 1000)})
+        # Écart de durée réelle - prévue (en minutes) par libellé CSV
+        prevue = _minutes(r["duree"])
+        a, d = _minutes(r["debut_reel"]), _minutes(r["fin_reelle"])
+        if prevue is not None and a is not None and d is not None:
+            ecarts[label].append(round((d - a) - prevue, 1))
 
-    # 4) Volume de badgeages sur 7 jours
-    from datetime import datetime, timedelta
-    d = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
-    t0 = _t.time()
-    try:
-        res = ximi.get("api/checkInOut", {"lastModification": d, "Top": 1,
-                       "ComputeHasMoreRows": "true", "ComputeHitCount": "true"})
-        rapport["H_badgeages_7j"] = {"Hitcount": res.get("Hitcount") or res.get("HitCount"),
-                                     "secondes": round(_t.time() - t0, 1)}
-    except Exception as e:
-        rapport["H_badgeages_7j"] = {"erreur": str(e)[:250]}
-
+    rapport["nb_rapproches"] = nb_match
+    rapport["par_libelle_csv"] = {k: dict(v) for k, v in stats.items()}
+    rapport["correspondance_heures_event"] = dict(concord_event)
+    rapport["ecart_duree_minutes"] = {
+        k: {"nb": len(v), "min": min(v), "mediane": median(v), "max": max(v)}
+        for k, v in ecarts.items() if v}
+    rapport["secondes"] = round(_t.time() - t0, 1)
     return jsonify(rapport)
