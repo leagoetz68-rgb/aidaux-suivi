@@ -1,5 +1,5 @@
 # app.py — Application de suivi Aid'aux (Flask + SQLite)
-
+import ximi
 import io
 import os
 import tempfile
@@ -528,3 +528,19 @@ def api_detail_financier_intervenant():
 @app.route("/financier")
 def page_financier():
     return render_template("financier.html", page="financier")
+    @app.route("/admin/ximi-test")
+@login_required
+def ximi_test():
+    resultats = {}
+    tests = {
+        "connexion": ("api/contactSources", {"Top": 3}),
+        "intervenants": ("api/agents", {"Top": 3}),
+        "badgeages": ("api/checkInOut", {"Top": 3}),
+        "interventions": ("api/interventions/all", {"Top": 3}),
+    }
+    for nom, (chemin, params) in tests.items():
+        try:
+            resultats[nom] = {"ok": True, "exemple": ximi.get(chemin, params)}
+        except Exception as e:
+            resultats[nom] = {"ok": False, "erreur": str(e)}
+    return resultats
