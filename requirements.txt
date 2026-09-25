@@ -6,3 +6,6 @@ matplotlib
 gunicorn
 requests
 psycopg2-binary
+PyJWT
+cryptography
+requests
