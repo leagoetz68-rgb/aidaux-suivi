@@ -478,7 +478,7 @@ def query_interventions(intervenant=None, type_probleme=None, mois=None,
     if intervenant:
         sql += " AND intervenant = ?"; params.append(intervenant)
     if client:
-        sql += " AND LOWER(client) LIKE ?"; params.append(f"%{client.strip().lower()}%")
+        sql += " AND client = ?"; params.append(client)
     if type_probleme:
         sql += " AND type_probleme = ?"; params.append(type_probleme)
     if mois:
@@ -511,7 +511,7 @@ def count_interventions(intervenant=None, type_probleme=None, mois=None,
     if intervenant:
         sql += " AND intervenant = ?"; params.append(intervenant)
     if client:
-        sql += " AND LOWER(client) LIKE ?"; params.append(f"%{client.strip().lower()}%")
+        sql += " AND client = ?"; params.append(client)
     if type_probleme:
         sql += " AND type_probleme = ?"; params.append(type_probleme)
     if mois:
@@ -537,7 +537,7 @@ def get_stats(intervenant=None, mois=None, date_debut=None, date_fin=None, clien
     if intervenant:
         where += " AND intervenant = ?"; params.append(intervenant)
     if client:
-        where += " AND LOWER(client) LIKE ?"; params.append(f"%{client.strip().lower()}%")
+        where += " AND client = ?"; params.append(client)
     if mois:
         where += " AND mois = ?"; params.append(mois)
     if date_debut:
@@ -574,6 +574,16 @@ def get_intervenants():
     rows = conn.execute(
         "SELECT DISTINCT intervenant FROM interventions WHERE intervenant IS NOT NULL "
         "AND intervenant != '' ORDER BY intervenant"
+    ).fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+def get_clients():
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT DISTINCT client FROM interventions WHERE client IS NOT NULL "
+        "AND client != '' ORDER BY client"
     ).fetchall()
     conn.close()
     return [r[0] for r in rows]
