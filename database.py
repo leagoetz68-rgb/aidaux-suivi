@@ -467,7 +467,7 @@ def insert_interventions(rows, filename):
 
 def query_interventions(intervenant=None, type_probleme=None, mois=None,
                         date_debut=None, date_fin=None, problems_only=False,
-                        limit=None, offset=None):
+                        limit=None, offset=None, client=None):
     """Requête filtrée. Retourne une liste de dicts (lignes)."""
     conn = get_conn()
     c = conn.cursor()
@@ -477,6 +477,8 @@ def query_interventions(intervenant=None, type_probleme=None, mois=None,
 
     if intervenant:
         sql += " AND intervenant = ?"; params.append(intervenant)
+    if client:
+        sql += " AND LOWER(client) LIKE ?"; params.append(f"%{client.strip().lower()}%")
     if type_probleme:
         sql += " AND type_probleme = ?"; params.append(type_probleme)
     if mois:
@@ -501,13 +503,15 @@ def query_interventions(intervenant=None, type_probleme=None, mois=None,
 
 
 def count_interventions(intervenant=None, type_probleme=None, mois=None,
-                        date_debut=None, date_fin=None, problems_only=False):
+                        date_debut=None, date_fin=None, problems_only=False, client=None):
     conn = get_conn()
     c = conn.cursor()
     sql = "SELECT COUNT(*) FROM interventions WHERE 1=1"
     params = []
     if intervenant:
         sql += " AND intervenant = ?"; params.append(intervenant)
+    if client:
+        sql += " AND LOWER(client) LIKE ?"; params.append(f"%{client.strip().lower()}%")
     if type_probleme:
         sql += " AND type_probleme = ?"; params.append(type_probleme)
     if mois:
@@ -523,7 +527,7 @@ def count_interventions(intervenant=None, type_probleme=None, mois=None,
     return n
 
 
-def get_stats(intervenant=None, mois=None, date_debut=None, date_fin=None):
+def get_stats(intervenant=None, mois=None, date_debut=None, date_fin=None, client=None):
     """Retourne les KPIs (total + comptes par type de problème) sur le périmètre filtré."""
     conn = get_conn()
     c = conn.cursor()
@@ -532,6 +536,8 @@ def get_stats(intervenant=None, mois=None, date_debut=None, date_fin=None):
     params = []
     if intervenant:
         where += " AND intervenant = ?"; params.append(intervenant)
+    if client:
+        where += " AND LOWER(client) LIKE ?"; params.append(f"%{client.strip().lower()}%")
     if mois:
         where += " AND mois = ?"; params.append(mois)
     if date_debut:
