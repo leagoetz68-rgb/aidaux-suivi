@@ -25,6 +25,7 @@ function escapeHtml(s) {
 function getFilters() {
   return {
     intervenant: document.getElementById("f-intervenant").value,
+    client: document.getElementById("f-client").value,
     mois: document.getElementById("f-mois").value,
     type_probleme: document.getElementById("f-type").value,
     date_debut: document.getElementById("f-debut").value,
@@ -40,16 +41,19 @@ function buildQuery(filters, extra = {}) {
 
 async function init() {
   // Remplir les dropdowns
-  const [intervenants, mois] = await Promise.all([
+  const [intervenants, mois, clients] = await Promise.all([
     (await fetch("/api/intervenants")).json(),
     (await fetch("/api/mois")).json(),
+    (await fetch("/api/clients")).json(),
   ]);
   const selI = document.getElementById("f-intervenant");
   intervenants.forEach(n => selI.add(new Option(n, n)));
+  const selC = document.getElementById("f-client");
+  clients.forEach(n => selC.add(new Option(n, n)));
   const selM = document.getElementById("f-mois");
   mois.forEach(m => selM.add(new Option(moisLabel(m), m)));
 
-  ["f-intervenant","f-mois","f-type","f-debut","f-fin"].forEach(id =>
+  ["f-intervenant","f-client","f-mois","f-type","f-debut","f-fin"].forEach(id =>
     document.getElementById(id).addEventListener("change", onFilterChange));
   document.getElementById("btn-reset").addEventListener("click", resetFilters);
   document.getElementById("btn-export").addEventListener("click", exportCSV);
@@ -60,7 +64,7 @@ async function init() {
 function onFilterChange() { currentPage = 1; refreshAll(); }
 
 function resetFilters() {
-  ["f-intervenant","f-mois","f-type","f-debut","f-fin"].forEach(id =>
+  ["f-intervenant","f-client","f-mois","f-type","f-debut","f-fin"].forEach(id =>
     document.getElementById(id).value = "");
   currentPage = 1;
   refreshAll();
