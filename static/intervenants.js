@@ -1,139 +1,189 @@
-let allData = [];
-let moyenne = 0;
-let chartInstance = null;
+// interventions.js — Table filtrable des interventions à problèmes (base complète)
 
-const COLORS = { manquees:"#C26259", partiels:"#FF4713", courtes:"#F39C12", longues:"#000F9F", ok:"#6FB89B", na:"#9AA3AF" };
+let currentPage = 1;
+let activeController = null;
 
-function moisLabel(m){
-  const noms=["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
-  const [y,mo]=m.split("-"); return `${noms[parseInt(mo,10)-1]} ${y}`;
+const BADGE_CLASS = {
+  "Manquée": "badge-manquee",
+  "Badgeage partiel": "badge-partiel",
+  "Trop courte": "badge-courte",
+  "Trop longue": "badge-longue",
+};
+
+function moisLabel(m) {
+  const noms = ["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+  const [y, mo] = m.split("-");
+  return `${noms[parseInt(mo,10)-1]} ${y}`;
 }
 
-async function init(){
-  const mois = await (await fetch("/api/mois")).json();
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+function getFilters() {
+  return {
+    intervenant: document.getElementById("f-intervenant").value,
+    client: document.getElementById("f-client").value.trim(),
+    mois: document.getElementById("f-mois").value,
+    type_probleme: document.getElementById("f-type").value,
+    date_debut: document.getElementById("f-debut").value,
+    date_fin: document.getElementById("f-fin").value,
+  };
+}
+
+function buildQuery(filters, extra = {}) {
+  const p = new URLSearchParams({ ...filters, ...extra });
+  [...p.keys()].forEach(k => { if (!p.get(k)) p.delete(k); });
+  return p.toString();
+}
+
+async function init() {
+  // Remplir les dropdowns
+  const [intervenants, mois] = await Promise.all([
+    (await fetch("/api/intervenants")).json(),
+    (await fetch("/api/mois")).json(),
+  ]);
+  const selI = document.getElementById("f-intervenant");
+  intervenants.forEach(n => selI.add(new Option(n, n)));
   const selM = document.getElementById("f-mois");
   mois.forEach(m => selM.add(new Option(moisLabel(m), m)));
 
-  document.getElementById("f-mois").addEventListener("change", load);
-  document.getElementById("f-search").addEventListener("input", render);
-  document.getElementById("m-close").addEventListener("click", closeModal);
-  document.getElementById("modal").addEventListener("click", (e)=>{
-    if (e.target.id === "modal") closeModal();
+  ["f-intervenant","f-mois","f-type","f-debut","f-fin"].forEach(id =>
+    document.getElementById(id).addEventListener("change", onFilterChange));
+  let clientTimer = null;
+  document.getElementById("f-client").addEventListener("input", () => {
+    clearTimeout(clientTimer);
+    clientTimer = setTimeout(onFilterChange, 300); // attend la fin de la frappe
   });
-  load();
+  document.getElementById("btn-reset").addEventListener("click", resetFilters);
+  document.getElementById("btn-export").addEventListener("click", exportCSV);
+
+  refreshAll();
 }
 
-let emails = {};
-let exclusions = new Set();
+function onFilterChange() { currentPage = 1; refreshAll(); }
 
-async function load(){
+function resetFilters() {
+  ["f-intervenant","f-client","f-mois","f-type","f-debut","f-fin"].forEach(id =>
+    document.getElementById(id).value = "");
+  currentPage = 1;
+  refreshAll();
+}
+
+async function refreshAll() {
+  if (activeController) activeController.abort();
+  activeController = new AbortController();
+  const signal = activeController.signal;
+  const filters = getFilters();
+  const page = currentPage;
+
   showLoading(true);
   try {
-    const mois = document.getElementById("f-mois").value;
-    const q = mois ? `?mois=${mois}` : "";
-    const d = await (await fetch(`/api/stats_intervenants${q}`)).json();
-    allData = d.intervenants;
-    moyenne = d.moyenne_taux;
-    emails = await (await fetch("/api/intervenant_emails")).json();
-    exclusions = new Set(await (await fetch("/api/intervenant_exclusion")).json());
-    render();
-  } finally { showLoading(false); }
+    await Promise.all([refreshStats(filters, signal), refreshTable(filters, page, signal)]);
+  } catch (e) {
+    if (e.name !== "AbortError") console.error(e);
+  } finally {
+    showLoading(false);
+  }
 }
 
-async function saveEmail(nom, input){
-  const email = input.value.trim();
-  if (!email) return;
-  await fetch("/api/intervenant_emails", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ intervenant: nom, email }),
-  });
-  emails[nom] = email;
+async function refreshStats(filters, signal) {
+  const d = await (await fetch(`/api/stats?${buildQuery(filters)}`, { signal })).json();
+  document.getElementById("kpi-total").textContent = d.total;
+  document.getElementById("kpi-manq").textContent = d.manquees.count;
+  document.getElementById("kpi-manq-pct").textContent = `${d.manquees.pct}%`;
+  document.getElementById("kpi-part").textContent = d.partiels.count;
+  document.getElementById("kpi-part-pct").textContent = `${d.partiels.pct}%`;
+  document.getElementById("kpi-duree").textContent = d.courtes_longues.count;
+  document.getElementById("kpi-duree-pct").textContent = `${d.courtes_longues.pct}%`;
 }
 
-async function toggleExclusion(nom, exclu){
-  await fetch("/api/intervenant_exclusion", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ intervenant: nom, exclu }),
-  });
-  if (exclu) exclusions.add(nom); else exclusions.delete(nom);
+async function refreshTable(filters, page, signal) {
+  const d = await (await fetch(`/api/interventions?${buildQuery(filters, { page })}`, { signal })).json();
+  document.getElementById("table-count").textContent =
+    d.total === 0 ? "Aucune intervention" : `${d.total} intervention${d.total>1?"s":""}`;
+  renderTable(d.rows);
+  renderPagination(d.page, d.total_pages);
 }
 
-function render(){
-  const term = document.getElementById("f-search").value.toLowerCase();
-  const data = allData.filter(d => d.intervenant.toLowerCase().includes(term));
-  document.getElementById("count").textContent =
-    `${data.length} intervenant${data.length>1?"s":""} · moyenne ${moyenne}%`;
-
+function renderTable(rows) {
   const tbody = document.getElementById("table-body");
-  if (!data.length){ tbody.innerHTML = `<tr><td colspan="11" class="empty-state">Aucun résultat.</td></tr>`; return; }
-
-  tbody.innerHTML = data.map(d => {
-    const cls = d.taux > moyenne ? "taux-high" : "taux-ok";
-    const nomEch = d.intervenant.replace(/'/g,"\\'");
-    const estExclu = exclusions.has(d.intervenant);
-    return `<tr>
-      <td><strong>${d.intervenant}</strong></td>
-      <td>${d.total}</td>
-      <td>${d.problemes}</td>
-      <td><span class="taux-badge ${cls}">${d.taux}%</span></td>
-      <td>${d.manquees}</td><td>${d.partiels}</td><td>${d.courtes}</td><td>${d.longues}</td>
-      <td><input type="email" placeholder="email…" value="${emails[d.intervenant] || ""}"
-            onblur="saveEmail('${nomEch}', this)" style="width:160px" /></td>
-      <td style="text-align:center">
-        <input type="checkbox" title="Exclure complètement cet intervenant des relances, même s'il ne badge pas"
-               ${estExclu ? "checked" : ""} onchange="toggleExclusion('${nomEch}', this.checked)" />
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="10" class="empty-state">Aucune intervention pour ces critères.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.date_prevue}</td><td>${r.intervenant}</td><td>${r.client}</td>
+      <td><span class="badge ${BADGE_CLASS[r.type_probleme]||""}">${r.type_probleme}</span></td>
+      <td>${r.timing}</td><td>${r.diff_minutes}</td>
+      <td>${r.debut_reel}</td><td>${r.fin_reelle}</td>
+      <td>
+        <textarea class="commentaire-input" data-id="${r.id}" rows="1"
+          style="width:160px;resize:vertical;font-size:12px;"
+          placeholder="Note interne…">${escapeHtml(r.commentaire)}</textarea>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;margin-top:2px;white-space:nowrap;">
+          <input type="checkbox" class="exclu-checkbox" data-id="${r.id}" ${r.exclu_relance ? "checked" : ""} />
+          Exclure des relances
+        </label>
       </td>
-      <td><button class="btn-link" onclick="openDetail('${nomEch}')">Voir →</button></td>
-    </tr>`;
-  }).join("");
+      <td><button class="btn-link danger" onclick="deleteInterv(${r.id})" title="Supprimer">✕</button></td>
+    </tr>`).join("");
+
+  tbody.querySelectorAll(".commentaire-input").forEach(el =>
+    el.addEventListener("blur", () => saveCommentaire(el.dataset.id)));
+  tbody.querySelectorAll(".exclu-checkbox").forEach(el =>
+    el.addEventListener("change", () => saveCommentaire(el.dataset.id)));
 }
 
-async function openDetail(nom){
-  showLoading(true);
-  try {
-    const d = await (await fetch(`/api/detail_intervenant?intervenant=${encodeURIComponent(nom)}`)).json();
-    const g = d.global;
-    document.getElementById("m-nom").textContent = nom;
-    document.getElementById("m-total").textContent = g.total;
-    document.getElementById("m-probs").textContent = g.problemes;
-    document.getElementById("m-taux").textContent = `${g.taux}%`;
-    document.getElementById("m-manq").textContent = g.manquees;
-    document.getElementById("m-clients").textContent = g.nb_clients;
-
-    const diff = Math.round((g.taux - moyenne)*10)/10;
-    const cmp = document.getElementById("m-compare");
-    if (diff > 0){ cmp.textContent = `⚠ Taux supérieur de ${diff} pts à la moyenne (${moyenne}%)`; cmp.className = "compare-line high"; }
-    else { cmp.textContent = `✓ Taux inférieur de ${Math.abs(diff)} pts à la moyenne (${moyenne}%)`; cmp.className = "compare-line ok"; }
-
-    renderChart(d.evolution);
-    document.getElementById("modal").style.display = "flex";
-  } finally { showLoading(false); }
-}
-
-function renderChart(evo){
-  if (chartInstance) chartInstance.destroy();
-  const ctx = document.getElementById("m-chart");
-  chartInstance = new Chart(ctx, {
-    type:"bar",
-    data:{
-      labels: evo.map(e=>moisLabel(e.mois)),
-      datasets:[
-        {label:"Manquées",data:evo.map(e=>e.manquees),backgroundColor:COLORS.manquees},
-        {label:"Partiels",data:evo.map(e=>e.partiels),backgroundColor:COLORS.partiels},
-        {label:"Trop courtes",data:evo.map(e=>e.courtes),backgroundColor:COLORS.courtes},
-        {label:"Trop longues",data:evo.map(e=>e.longues),backgroundColor:COLORS.longues},
-        {label:"Non renseigné",data:evo.map(e=>e.na || 0),backgroundColor:COLORS.na},
-        {label:"Sans problème",data:evo.map(e=>Math.max(0, e.total - e.manquees - e.partiels - e.courtes - e.longues - (e.na||0))),backgroundColor:COLORS.ok},
-      ],
-    },
-    options:{ responsive:true, maintainAspectRatio:false,
-      scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}},
-      plugins:{legend:{position:"bottom",labels:{boxWidth:12,font:{size:11}}}} },
+async function saveCommentaire(id) {
+  const commentaire = document.querySelector(`.commentaire-input[data-id="${id}"]`).value;
+  const exclu_relance = document.querySelector(`.exclu-checkbox[data-id="${id}"]`).checked;
+  await fetch("/api/commentaire_anomalie", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ id: parseInt(id, 10), commentaire, exclu_relance })
   });
 }
 
-function closeModal(){ document.getElementById("modal").style.display = "none"; }
+async function deleteInterv(id) {
+  if (!confirm("Supprimer cette intervention ?")) return;
+  showLoading(true);
+  try {
+    await fetch("/api/delete_intervention", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ id })
+    });
+    refreshAll();
+  } finally { showLoading(false); }
+}
+
+function renderPagination(page, total) {
+  const el = document.getElementById("pagination");
+  if (total <= 1) { el.innerHTML = ""; return; }
+  const nums = buildPageNumbers(page, total);
+  el.innerHTML = `
+    <button class="page-btn" ${page<=1?"disabled":""} onclick="goPage(${page-1})">‹</button>
+    ${nums.map(p => p==="…"
+      ? `<span class="page-info">…</span>`
+      : `<button class="page-btn ${p===page?"active":""}" onclick="goPage(${p})">${p}</button>`).join("")}
+    <button class="page-btn" ${page>=total?"disabled":""} onclick="goPage(${page+1})">›</button>`;
+}
+
+function buildPageNumbers(cur, total) {
+  if (total <= 7) return Array.from({length: total}, (_, i) => i+1);
+  const s = new Set([1, total, cur, cur-1, cur+1].filter(p => p>=1 && p<=total));
+  const sorted = [...s].sort((a,b)=>a-b);
+  const out = [];
+  sorted.forEach((p,i) => { if (i>0 && p-sorted[i-1]>1) out.push("…"); out.push(p); });
+  return out;
+}
+
+function goPage(p) { currentPage = p; refreshAll(); }
+
+function exportCSV() {
+  window.location = `/api/export?${buildQuery(getFilters())}`;
+}
 
 init();
