@@ -188,12 +188,12 @@ body {
 }
 .filter-group { display: flex; flex-direction: column; gap: 4px; }
 .filter-group label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
-select, input[type="date"] {
+select, input[type="date"], input[type="search"] {
   border: 1px solid var(--border); border-radius: 8px;
   padding: 8px 10px; font-size: 13px; color: var(--text);
   background: #fff; outline: none; min-width: 150px;
 }
-select:focus, input[type="date"]:focus { border-color: var(--navy); }
+select:focus, input[type="date"]:focus, input[type="search"]:focus { border-color: var(--navy); }
 
 /* ── TABLES ── */
 .table-section { padding: 0; }
