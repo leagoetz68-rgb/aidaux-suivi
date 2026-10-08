@@ -276,7 +276,8 @@ def api_stats():
     date_debut = request.args.get("date_debut") or None
     date_fin = request.args.get("date_fin") or None
 
-    stats = db.get_stats(intervenant, mois, date_debut, date_fin)
+    client = request.args.get("client") or None
+    stats = db.get_stats(intervenant, mois, date_debut, date_fin, client=client)
     total = stats["total"]
 
     def pct(n):
@@ -299,17 +300,18 @@ def api_interventions():
     mois = request.args.get("mois") or None
     date_debut = request.args.get("date_debut") or None
     date_fin = request.args.get("date_fin") or None
+    client = request.args.get("client") or None
     page = int(request.args.get("page", 1))
     per_page = 25
 
     total = db.count_interventions(intervenant, type_probleme, mois,
-                                   date_debut, date_fin, problems_only=True)
+                                   date_debut, date_fin, problems_only=True, client=client)
     total_pages = max(1, (total + per_page - 1) // per_page)
     page = max(1, min(page, total_pages))
 
     rows = db.query_interventions(
         intervenant, type_probleme, mois, date_debut, date_fin,
-        problems_only=True, limit=per_page, offset=(page - 1) * per_page
+        problems_only=True, limit=per_page, offset=(page - 1) * per_page, client=client
     )
 
     out = []
@@ -347,8 +349,9 @@ def api_export():
     date_debut = request.args.get("date_debut") or None
     date_fin = request.args.get("date_fin") or None
 
+    client = request.args.get("client") or None
     rows = db.query_interventions(intervenant, type_probleme, mois,
-                                  date_debut, date_fin, problems_only=True)
+                                  date_debut, date_fin, problems_only=True, client=client)
 
     buf = io.StringIO()
     w = csv.writer(buf)
