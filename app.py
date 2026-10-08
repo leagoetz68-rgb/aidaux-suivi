@@ -336,6 +336,10 @@ def api_interventions():
 def api_intervenants():
     return jsonify(db.get_intervenants())
 
+@app.route("/api/clients")
+def api_clients():
+    return jsonify(db.get_clients())
+
 @app.route("/api/mois")
 def api_mois():
     return jsonify(db.get_mois_list())
