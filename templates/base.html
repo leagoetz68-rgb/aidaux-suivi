@@ -12,11 +12,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}Aid'aux suivi{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="/static/logo.svg" />
-  <link rel="stylesheet" href="/static/style.css?v=16" />
+  <link rel="stylesheet" href="/static/style.css?v=17" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <div id="loading-overlay">Chargement…</div>
+<div class="mobile-bar">
+  <button class="menu-btn" type="button" onclick="document.body.classList.toggle('menu-ouvert')" aria-label="Menu">☰</button>
+  <img src="/static/logo.svg" alt="Aid'aux" />
+</div>
+<div class="menu-fond" onclick="document.body.classList.remove('menu-ouvert')"></div>
 <div class="app-layout">
   <!-- ── SIDEBAR ── -->
   <aside class="sidebar">
