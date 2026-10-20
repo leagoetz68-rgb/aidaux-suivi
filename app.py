@@ -5,7 +5,7 @@ import io
 import os
 import tempfile
 
-from flask import Flask, jsonify, render_template, request, send_file, session, redirect, url_for
+from flask import Flask, Response, jsonify, render_template, request, send_file, session, redirect, url_for
 
 import database as db
 from parser import parse_csv_to_rows
@@ -26,7 +26,7 @@ app.register_blueprint(auth.bp)
 # passe, questionnaire public par jeton, endpoint cron).
 PAGES_PUBLIQUES = {
     "auth.login", "auth.logout", "auth.oubli", "auth.definir",
-    "static", "page_questionnaire", "api_cron_rappel_hebdo", "api_cron_ximi_sync",
+    "static", "manifest", "service_worker", "page_questionnaire", "api_cron_rappel_hebdo", "api_cron_ximi_sync",
 }
 
 @app.before_request
@@ -66,6 +66,35 @@ def fmt_diff(val):
 # ─────────────────────────────────────────────────────────
 # PAGES (rendu serveur)
 # ─────────────────────────────────────────────────────────
+
+# --- Application installable (écran d'accueil iPhone / Android) ---
+MANIFEST = {
+    "name": "Aid'Aux Suivi", "short_name": "Aid'Aux Suivi", "start_url": "/", "scope": "/",
+    "display": "standalone", "background_color": "#ffffff", "theme_color": "#1B2A6B", "lang": "fr",
+    "icons": [
+        {"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+        {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+        {"src": "/static/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+    ],
+}
+
+# Service worker minimal : sans cache, tout passe par le réseau (données toujours à jour).
+SERVICE_WORKER = """self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', () => {});
+"""
+
+
+@app.route("/manifest.webmanifest")
+def manifest():
+    import json
+    return Response(json.dumps(MANIFEST, ensure_ascii=False), mimetype="application/manifest+json")
+
+
+@app.route("/sw.js")
+def service_worker():
+    return Response(SERVICE_WORKER, mimetype="application/javascript", headers={"Cache-Control": "no-cache"})
+
 
 @app.route("/")
 def page_accueil():
